@@ -2,3 +2,5 @@
 * text=auto eol=lf
 # Los goldens se comparan byte por byte: nunca convertir.
 *.gcode -text
+# Imágenes de referencia de QA: copia exacta, se comprueban con SHA256SUMS. Nunca convertir.
+tests/vector_ref/** -text
