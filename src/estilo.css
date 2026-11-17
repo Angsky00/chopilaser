@@ -1,7 +1,7 @@
 :root { font-family: system-ui, sans-serif; color-scheme: light dark; }
 body { max-width: 52rem; margin: 0 auto; padding: 1rem; }
 h1 small { font-weight: normal; font-size: 0.6em; }
-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.75rem; }
+form { display: block; }
 label { display: flex; flex-direction: column; gap: 0.25rem; font-weight: 600; }
 input, select, button { font: inherit; padding: 0.35rem 0.5rem; }
 button { margin: 0.5rem 0.5rem 0.5rem 0; cursor: pointer; }
@@ -9,3 +9,8 @@ button:disabled { cursor: not-allowed; }
 .nota { opacity: 0.8; }
 .errores { color: #c62828; }
 textarea { width: 100%; font-family: ui-monospace, monospace; font-size: 0.85rem; box-sizing: border-box; }
+fieldset { border: 1px solid #8884; border-radius: 6px; margin: 0 0 0.75rem; padding: 0.75rem; display: grid; gap: 0.75rem; }
+.rejilla { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.75rem; }
+.fila { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
+[hidden] { display: none !important; }
+details { margin: 0.5rem 0 1rem; }
