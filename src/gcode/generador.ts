@@ -6,11 +6,12 @@
 //  - F antes del primer G1 de cada trayectoria.
 //  - S calculado desde el % y limitado a sMax ($30): 100 % = sMax exacto, 0 % = S0.
 //  - Termina siempre con M5 y S0.
-//  - Coordenadas con 3 decimales fijos, sin NaN, sin negativos y dentro de la cama.
+//  - El diseño (origen 0,0 abajo a la izquierda) se traslada a la esquina (xMin, yMin)
+//    del área de trabajo; las coordenadas usan 3 decimales fijos, sin NaN y siempre dentro del área.
 //  - Solo ASCII, sin BOM, fin de línea LF.
-import { validarConfigMaquina } from './config';
+import { erroresConfigMaquina } from './config';
 import { aMilesimas, milesimasCortas, milesimasFijas } from './formato';
-import { ErrorGcode, type Capa, type ConfigMaquina, type Trabajo } from './types';
+import { ErrorGcode, type AreaTrabajo, type Capa, type ConfigMaquina, type Trabajo } from './types';
 
 /** Límite de S en milésimas, sin pasar nunca de sMax por redondeo. */
 function sMaxMilesimas(sMax: number): number {
@@ -44,24 +45,45 @@ function validarCapa(capa: Capa, i: number): void {
   if (capa.modo !== 'M3' && capa.modo !== 'M4') throw new ErrorGcode(`Capa ${n}: el modo debe ser M3 o M4.`);
 }
 
-function coordenada(valor: number, max: number, eje: 'X' | 'Y'): string {
+interface LimitesEje {
+  /** Desplazamiento en milésimas (xMin o yMin, redondeado hacia dentro del área). */
+  min: number;
+  max: number;
+}
+
+function limites(area: AreaTrabajo): { x: LimitesEje; y: LimitesEje } {
+  const eje = (a: number, b: number): LimitesEje => {
+    const min = Math.ceil(a * 1000 - 1e-6);
+    const max = Math.floor(b * 1000 + 1e-6);
+    return { min: min === 0 ? 0 : min, max: max === 0 ? 0 : max };
+  };
+  return { x: eje(area.xMin, area.xMax), y: eje(area.yMin, area.yMax) };
+}
+
+function coordenada(valor: number, lim: LimitesEje, eje: 'X' | 'Y'): string {
   if (!Number.isFinite(valor)) throw new ErrorGcode(`Coordenada ${eje} no válida (NaN o infinito).`);
-  const k = aMilesimas(valor);
-  if (k < 0) throw new ErrorGcode(`Coordenada ${eje}${valor} negativa: queda fuera de la cama.`);
-  if (k > aMilesimas(max)) throw new ErrorGcode(`Coordenada ${eje}${valor} fuera de la cama (máximo ${max} mm).`);
-  return `${eje}${milesimasFijas(k)}`;
+  const k = lim.min + aMilesimas(valor);
+  if (k < lim.min || k > lim.max)
+    throw new ErrorGcode(
+      `Coordenada ${eje}${milesimasFijas(k)} fuera del área de trabajo (${milesimasFijas(lim.min)} a ${milesimasFijas(lim.max)}).`,
+    );
+  return `${eje}${milesimasFijas(k === 0 ? 0 : k)}`;
 }
 
 const SOLO_ASCII = /^[\x0A\x20-\x7E]*$/;
 
 export function generarGcode(trabajo: Trabajo, maquina: ConfigMaquina): string {
-  const v = validarConfigMaquina(maquina);
-  if (!v.ok) throw new ErrorGcode(v.errores.join(' '));
-  const cfg = v.config;
+  const errores = erroresConfigMaquina(maquina);
+  if (errores.length > 0) throw new ErrorGcode(errores.join(' '));
+  const cfg = maquina;
+  const lim = limites(cfg.area);
   const L: string[] = [];
   L.push('; ChopiLaser - G-code para GRBL por tarjeta SD');
   L.push(`; S maximo ($30): ${milesimasCortas(sMaxMilesimas(cfg.sMax))}`);
-  L.push(`; Cama: ${milesimasCortas(aMilesimas(cfg.camaAncho))} x ${milesimasCortas(aMilesimas(cfg.camaAlto))} mm`);
+  L.push(
+    `; Area de trabajo: X ${milesimasFijas(lim.x.min)} a ${milesimasFijas(lim.x.max)}, ` +
+      `Y ${milesimasFijas(lim.y.min)} a ${milesimasFijas(lim.y.max)} mm`,
+  );
   L.push('G21 G90');
   L.push('M5 S0');
 
@@ -78,8 +100,8 @@ export function generarGcode(trabajo: Trabajo, maquina: ConfigMaquina): string {
       for (const tray of tc.trayectorias) {
         if (tray.length < 2) continue;
         const pts = tray.map((pt) => ({
-          x: coordenada(pt.x, cfg.camaAncho, 'X'),
-          y: coordenada(pt.y, cfg.camaAlto, 'Y'),
+          x: coordenada(pt.x, lim.x, 'X'),
+          y: coordenada(pt.y, lim.y, 'Y'),
         }));
         L.push('S0');
         L.push(`G0 ${pts[0].x} ${pts[0].y}`);

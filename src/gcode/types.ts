@@ -22,15 +22,21 @@ export interface Capa {
   modo: ModoLaser;
 }
 
+/** Área de trabajo en coordenadas de la máquina (mm). Puede ser negativa, según el origen del homing. */
+export interface AreaTrabajo {
+  xMin: number;
+  yMin: number;
+  xMax: number;
+  yMax: number;
+}
+
 export interface ConfigMaquina {
-  /** Valor de $30 (S máximo). Obligatorio, > 0. */
+  /** Valor de $30 (S máximo). Obligatorio, > 0. Puede ser decimal (p. ej. 1 en escala tipo Smoothie). */
   sMax: number;
   /** Valor de $32 (modo láser), solo como dato. El generador apaga el láser en G0 siempre. */
   laserMode32: 0 | 1 | null;
-  /** Ancho de la cama en mm (X). */
-  camaAncho: number;
-  /** Alto de la cama en mm (Y). */
-  camaAlto: number;
+  /** Área de trabajo. El diseño (origen 0,0 abajo a la izquierda) se traslada a (xMin, yMin). */
+  area: AreaTrabajo;
 }
 
 export interface TrabajoCapa {

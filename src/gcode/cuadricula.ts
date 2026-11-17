@@ -1,7 +1,12 @@
 // Cuadrícula de prueba de potencia × velocidad para calibrar materiales.
 // Columnas: potencias. Filas: velocidades, primero en M3 y luego en M4.
 // Incluye a propósito celdas al 0 % y al 100 % para ejercitar los extremos de S.
-import { ErrorGcode, type ModoLaser, type Polilinea, type Trabajo } from './types';
+import { ErrorGcode, type AreaTrabajo, type ModoLaser, type Polilinea, type Trabajo } from './types';
+
+/** Tamaño disponible de un área de trabajo. */
+export function tamanoArea(a: AreaTrabajo): { ancho: number; alto: number } {
+  return { ancho: a.xMax - a.xMin, alto: a.yMax - a.yMin };
+}
 
 export interface OpcionesCuadricula {
   potencias: number[];
@@ -57,6 +62,7 @@ function cuadro(x0: number, y0: number, lado: number, paso: number): Polilinea[]
   return [contorno, ...relleno];
 }
 
+/** Cuadrícula en coordenadas del diseño (0,0 abajo a la izquierda); el generador la traslada al área. */
 export function generarCuadricula(
   cama: { ancho: number; alto: number },
   o: OpcionesCuadricula = CUADRICULA_PREDETERMINADA,
@@ -64,7 +70,7 @@ export function generarCuadricula(
   const t = tamanoCuadricula(o);
   if (t.ancho > cama.ancho || t.alto > cama.alto) {
     throw new ErrorGcode(
-      `La cuadrícula mide ${t.ancho} x ${t.alto} mm y no cabe en la cama de ${cama.ancho} x ${cama.alto} mm.`,
+      `La cuadrícula mide ${t.ancho} x ${t.alto} mm y no cabe en el área de trabajo de ${cama.ancho} x ${cama.alto} mm.`,
     );
   }
   const capas: Trabajo['capas'] = [];
