@@ -1,0 +1,13 @@
+{
+  "_nota": "CONFIGURACIONES DE PRUEBA. No son los valores reales de la máquina de Angel ($30 y $32 siguen pendientes).",
+  "goldens": [
+    {
+      "archivo": "cuadricula_s1000.gcode",
+      "maquinaPrueba": { "sMax": 1000, "laserMode32": null, "camaAncho": 400, "camaAlto": 400 }
+    },
+    {
+      "archivo": "cuadricula_s255.gcode",
+      "maquinaPrueba": { "sMax": 255, "laserMode32": null, "camaAncho": 400, "camaAlto": 400 }
+    }
+  ]
+}
