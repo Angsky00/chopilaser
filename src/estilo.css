@@ -14,3 +14,13 @@ fieldset { border: 1px solid #8884; border-radius: 6px; margin: 0 0 0.75rem; pad
 .fila { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; }
 [hidden] { display: none !important; }
 details { margin: 0.5rem 0 1rem; }
+.campo { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.75rem; }
+.campo label { font-weight: 600; }
+.ayuda { opacity: 0.8; }
+.error-campo { color: #c62828; min-height: 0; }
+.error-campo:empty { display: none; }
+[aria-invalid='true'] { border-color: #c62828; outline-color: #c62828; }
+.bloque { display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; margin: 0 0 1rem; }
+.bloque button { margin: 0; }
+.ok { color: #2e7d32; }
+.ancho-completo { grid-column: 1 / -1; }

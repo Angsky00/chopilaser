@@ -2,6 +2,7 @@ import './estilo.css';
 import {
   CUADRICULA_PREDETERMINADA,
   ErrorGcode,
+  MENSAJES,
   ORIGENES,
   PRESET_GRBL11,
   generarCuadricula,
@@ -26,60 +27,86 @@ app.innerHTML = `
   </header>
 
   <section id="pantalla-maquina" data-testid="pantalla-maquina" aria-labelledby="t-maquina" hidden>
-    <h2 id="t-maquina">Configuración de la máquina</h2>
-    <p class="nota" id="intro-maquina"></p>
+    <h2 id="t-maquina">Configura tu máquina</h2>
+    <p class="nota" id="intro-maquina">ChopiLaser necesita saber cómo es tu láser antes de exportar. Solo se pide una vez; después lo cambias en «Máquina».</p>
     <div id="fila-perfiles" class="fila" hidden>
       <label>Perfil <select id="perfil-select" data-testid="perfil-select"></select></label>
       <button id="nuevo-perfil" data-testid="nuevo-perfil" type="button">Nuevo perfil</button>
     </div>
-    <div class="fila">
-      <button id="preset-grbl" data-testid="preset-grbl" type="button">Valores de fábrica de GRBL 1.1</button>
+    <div class="bloque">
+      <button id="preset-grbl" data-testid="preset-grbl" type="button">Usar valores de fábrica de GRBL 1.1</button>
+      <small class="ayuda">Llena $30=1000 y $32=0. El nombre, el área y el origen los pones tú.</small>
     </div>
-    <details id="caja-dolar">
+    <details id="caja-dolar" class="bloque">
       <summary>Pegar salida de $$</summary>
-      <p class="nota">Pega aquí lo que responde la máquina al comando <code>$$</code>. Se leen $30, $32, $130 y $131.</p>
+      <p class="nota">Escribe $$ en la consola de tu máquina, copia todo lo que responda y pégalo aquí.</p>
       <textarea id="pegar-dolar" data-testid="pegar-dolar" rows="6" spellcheck="false" aria-label="Pegar salida de $$"></textarea>
       <button id="leer-dolar" data-testid="leer-dolar" type="button">Leer valores</button>
+      <p id="dolar-estado" data-testid="dolar-estado" role="status"></p>
     </details>
     <form id="form-maquina" novalidate>
+      <div class="campo">
+        <label for="perfil-nombre">Nombre de la máquina</label>
+        <input id="perfil-nombre" data-testid="perfil-nombre" placeholder="Ej. Láser del taller" autocomplete="off" aria-describedby="ayuda-nombre error-nombre" />
+        <small class="ayuda" id="ayuda-nombre">Para reconocerla si tienes varias.</small>
+        <small class="error-campo" id="error-nombre" data-testid="error-nombre"></small>
+      </div>
+      <div class="campo">
+        <label for="s-max">Potencia máxima ($30)</label>
+        <input id="s-max" data-testid="s-max" inputmode="decimal" autocomplete="off" aria-describedby="ayuda-smax error-sMax" />
+        <small class="ayuda" id="ayuda-smax">El valor de S que equivale al 100 %. Aparece en la respuesta de $$ como $30=.</small>
+        <small class="error-campo" id="error-sMax" data-testid="error-sMax"></small>
+      </div>
+      <div class="campo">
+        <label for="modo-32">Modo láser ($32)</label>
+        <select id="modo-32" data-testid="modo-32" aria-describedby="ayuda-32">
+          <option value="">—</option>
+          <option value="1">Activado ($32=1)</option>
+          <option value="0">Desactivado ($32=0)</option>
+        </select>
+        <small class="ayuda" id="ayuda-32">ChopiLaser apaga el láser en cada movimiento rápido, esté como esté este valor.</small>
+      </div>
       <fieldset>
-        <legend>Perfil</legend>
-        <label>Nombre del perfil <input id="perfil-nombre" data-testid="perfil-nombre" autocomplete="off" /></label>
-      </fieldset>
-      <fieldset>
-        <legend>Parámetros de la máquina</legend>
-        <label>S máximo ($30) <input id="s-max" data-testid="s-max" inputmode="decimal" autocomplete="off" /></label>
-        <label>Modo láser ($32)
-          <select id="modo-32" data-testid="modo-32">
-            <option value="">Sin especificar</option>
-            <option value="0">0 (desactivado)</option>
-            <option value="1">1 (activado)</option>
-          </select>
-        </label>
-      </fieldset>
-      <fieldset>
-        <legend>Área de trabajo</legend>
-        <label>Esquina del origen (0,0)
-          <select id="origen" data-testid="origen">
-            <option value="">Elige…</option>
-            ${ORIGENES.map((o) => `<option value="${o.valor}">${o.texto}</option>`).join('')}
-          </select>
-        </label>
+        <legend>Área de trabajo (mm)</legend>
         <div id="campos-cama" class="rejilla">
-          <label>Ancho (mm) <input id="cama-ancho" data-testid="cama-ancho" inputmode="decimal" autocomplete="off" /></label>
-          <label>Alto (mm) <input id="cama-alto" data-testid="cama-alto" inputmode="decimal" autocomplete="off" /></label>
+          <div class="campo">
+            <label for="cama-ancho">Ancho (X)</label>
+            <input id="cama-ancho" data-testid="cama-ancho" inputmode="decimal" autocomplete="off" aria-describedby="ayuda-area error-camaAncho" />
+            <small class="error-campo" id="error-camaAncho" data-testid="error-camaAncho"></small>
+          </div>
+          <div class="campo">
+            <label for="cama-alto">Fondo (Y)</label>
+            <input id="cama-alto" data-testid="cama-alto" inputmode="decimal" autocomplete="off" aria-describedby="ayuda-area error-camaAlto" />
+            <small class="error-campo" id="error-camaAlto" data-testid="error-camaAlto"></small>
+          </div>
+          <small class="ayuda ancho-completo" id="ayuda-area">Lo que de verdad recorre el cabezal sobre tu mesa. En $$ viene como $130 y $131.</small>
         </div>
         <div id="campos-area" class="rejilla" hidden>
-          <label>xmin (mm) <input id="x-min" data-testid="x-min" inputmode="decimal" autocomplete="off" /></label>
-          <label>ymin (mm) <input id="y-min" data-testid="y-min" inputmode="decimal" autocomplete="off" /></label>
-          <label>xmax (mm) <input id="x-max" data-testid="x-max" inputmode="decimal" autocomplete="off" /></label>
-          <label>ymax (mm) <input id="y-max" data-testid="y-max" inputmode="decimal" autocomplete="off" /></label>
+          ${(['xMin', 'yMin', 'xMax', 'yMax'] as const)
+            .map((c) => {
+              const id = c.replace(/([A-Z])/, '-$1').toLowerCase();
+              return `<div class="campo">
+            <label for="${id}">${c.toLowerCase()}</label>
+            <input id="${id}" data-testid="${id}" inputmode="decimal" autocomplete="off" aria-describedby="error-${c}" />
+            <small class="error-campo" id="error-${c}" data-testid="error-${c}"></small>
+          </div>`;
+            })
+            .join('')}
+        </div>
+        <div class="campo">
+          <label for="origen">¿Dónde queda el 0,0 después del homing?</label>
+          <select id="origen" data-testid="origen" aria-describedby="ayuda-origen error-origen">
+            <option value="">—</option>
+            ${ORIGENES.map((o) => `<option value="${o.valor}">${o.texto}</option>`).join('')}
+          </select>
+          <small class="ayuda" id="ayuda-origen">Es la esquina a la que va la máquina cuando busca sus topes.</small>
+          <small class="error-campo" id="error-origen" data-testid="error-origen"></small>
         </div>
         <p id="area-resumen" data-testid="area-resumen" class="nota"></p>
       </fieldset>
     </form>
-    <ul id="errores" data-testid="errores" class="errores" role="alert"></ul>
-    <button id="guardar-perfil" data-testid="guardar-perfil" type="button" disabled>Guardar perfil</button>
+    <p id="errores" data-testid="errores" class="errores" role="alert"></p>
+    <button id="guardar-perfil" data-testid="guardar-perfil" type="button" disabled>Guardar y empezar</button>
     <button id="cancelar-perfil" data-testid="cancelar-perfil" type="button" hidden>Cancelar</button>
   </section>
 
@@ -105,7 +132,6 @@ app.innerHTML = `
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
 const pantalla = $<HTMLElement>('pantalla-maquina');
 const principal = $<HTMLElement>('app-principal');
-const intro = $<HTMLParagraphElement>('intro-maquina');
 const filaPerfiles = $<HTMLDivElement>('fila-perfiles');
 const perfilSelect = $<HTMLSelectElement>('perfil-select');
 const campos = {
@@ -124,7 +150,8 @@ type Campo = keyof typeof campos;
 const camposCama = $<HTMLDivElement>('campos-cama');
 const camposArea = $<HTMLDivElement>('campos-area');
 const areaResumen = $<HTMLParagraphElement>('area-resumen');
-const errores = $<HTMLUListElement>('errores');
+const errores = $<HTMLParagraphElement>('errores');
+const dolarEstado = $<HTMLParagraphElement>('dolar-estado');
 const btnGuardar = $<HTMLButtonElement>('guardar-perfil');
 const btnCancelar = $<HTMLButtonElement>('cancelar-perfil');
 const btnGenerar = $<HTMLButtonElement>('generar');
@@ -159,13 +186,15 @@ function validarFormulario(): void {
   camposCama.hidden = personalizada;
   camposArea.hidden = !personalizada;
   const r = validarPerfil(leerFormulario());
-  errores.replaceChildren(
-    ...(r.ok ? [] : r.errores).map((e) => {
-      const li = document.createElement('li');
-      li.textContent = e;
-      return li;
-    }),
-  );
+  const porCampo = r.ok ? {} : r.porCampo;
+  for (const k of Object.keys(campos) as Campo[]) {
+    const msg = k === 'laserMode32' ? undefined : porCampo[k];
+    const el = document.getElementById(`error-${k}`);
+    if (el) el.textContent = msg ?? '';
+    if (msg) campos[k].setAttribute('aria-invalid', 'true');
+    else campos[k].removeAttribute('aria-invalid');
+  }
+  errores.textContent = r.ok ? '' : 'Completa los campos marcados para continuar.';
   btnGuardar.disabled = !r.ok;
   if (r.ok) {
     const a = r.perfil.config.area;
@@ -185,14 +214,12 @@ function mostrarPantallaMaquina(primeraVez: boolean): void {
   invalidarGcode();
   pantalla.hidden = false;
   principal.hidden = true;
-  intro.textContent = primeraVez
-    ? 'Antes de empezar, configura tu máquina. Copia los valores de la configuración de tu máquina: no hay valores por defecto.'
-    : 'Edita el perfil de la máquina. Los cambios se aplican al guardar.';
   filaPerfiles.hidden = primeraVez;
   btnCancelar.hidden = primeraVez || perfil === null;
   editando = primeraVez ? 0 : almacen.activo;
   llenarSelectorPerfiles();
   llenarFormulario(almacen.perfiles[editando] ?? {});
+  dolarEstado.textContent = '';
   campos.nombre.focus();
 }
 
@@ -228,7 +255,13 @@ $<HTMLButtonElement>('preset-grbl').addEventListener('click', () => {
 
 $<HTMLButtonElement>('leer-dolar').addEventListener('click', () => {
   const valores = leerSalidaDolarDolar($<HTMLTextAreaElement>('pegar-dolar').value);
+  const n = Object.keys(valores).length;
   for (const [k, v] of Object.entries(valores)) campos[k as Campo].value = v;
+  dolarEstado.textContent =
+    n > 0
+      ? `Listo: se llenaron ${n} valores. Revísalos antes de guardar.`
+      : 'No encontré valores de GRBL en el texto. Copia la respuesta completa de $$.';
+  dolarEstado.className = n > 0 ? 'ok' : 'errores';
   validarFormulario();
 });
 
@@ -275,7 +308,7 @@ btnExportar.addEventListener('click', async () => {
   almacen = leerAlmacen(localStorage);
   if (!perfilActivo(almacen) || gcode === null) {
     invalidarGcode();
-    estado.textContent = 'Exportación bloqueada: la configuración de la máquina no es válida.';
+    estado.textContent = MENSAJES.exportarSinPerfil;
     return;
   }
   try {

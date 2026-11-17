@@ -8,6 +8,7 @@ import {
   numeroFinito,
   numeroPositivo,
   PRESET_GRBL11,
+  MENSAJES,
   validarPerfil,
 } from '../../src/gcode';
 import { leerAlmacen, perfilActivo, CLAVE_PERFILES } from '../../src/perfiles';
@@ -51,6 +52,21 @@ describe('perfil de máquina', () => {
   it('sin perfil no hay valores por defecto', () => {
     expect(validarPerfil(undefined).ok).toBe(false);
     expect(validarPerfil({}).ok).toBe(false);
+  });
+
+  it('errores por campo con los textos finales', () => {
+    const r = validarPerfil({ ...base, nombre: '', sMax: '', camaAncho: 'abc', camaAlto: '-1' });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.porCampo).toEqual({
+      nombre: 'Este dato hace falta.',
+      sMax: 'Este dato hace falta.',
+      camaAncho: 'Escribe un número mayor que 0.',
+      camaAlto: 'Escribe un número mayor que 0.',
+    });
+    const r2 = validarPerfil({ ...base, origen: '' });
+    expect(!r2.ok && r2.porCampo.origen).toBe('Este dato hace falta.');
+    expect(MENSAJES.exportarSinPerfil).toBe('Antes de exportar, configura tu máquina.');
   });
 
   it('el nombre es obligatorio', () => {
@@ -114,7 +130,8 @@ describe('área de trabajo', () => {
 
 describe('preset de GRBL 1.1 y salida de $$', () => {
   it('el preset tiene los valores de fábrica de GRBL 1.1', () => {
-    expect(PRESET_GRBL11).toEqual({ sMax: '1000', laserMode32: '0', camaAncho: '200', camaAlto: '200' });
+    // Solo $30 y $32: el área, el origen y el nombre los escribe el usuario.
+    expect(PRESET_GRBL11).toEqual({ sMax: '1000', laserMode32: '0' });
   });
 
   it('lee $30, $32, $130 y $131 de la salida de $$', () => {

@@ -10,12 +10,24 @@ export type OrigenCama =
   | 'personalizada';
 
 export const ORIGENES: { valor: OrigenCama; texto: string }[] = [
-  { valor: 'inferior-izquierda', texto: 'Abajo a la izquierda (X e Y positivos)' },
-  { valor: 'inferior-derecha', texto: 'Abajo a la derecha (X negativo, Y positivo)' },
-  { valor: 'superior-izquierda', texto: 'Arriba a la izquierda (X positivo, Y negativo)' },
-  { valor: 'superior-derecha', texto: 'Arriba a la derecha (X e Y negativos)' },
-  { valor: 'personalizada', texto: 'Personalizada (xmin, ymin, xmax, ymax)' },
+  { valor: 'inferior-izquierda', texto: 'Abajo a la izquierda' },
+  { valor: 'inferior-derecha', texto: 'Abajo a la derecha' },
+  { valor: 'superior-izquierda', texto: 'Arriba a la izquierda' },
+  { valor: 'superior-derecha', texto: 'Arriba a la derecha' },
+  // Opción avanzada: área con xmin, ymin, xmax, ymax.
+  { valor: 'personalizada', texto: 'Avanzado: xmin, ymin, xmax, ymax' },
 ];
+
+/** Textos de error de los campos (textos finales de Marketing). */
+export const MENSAJES = {
+  vacio: 'Este dato hace falta.',
+  numeroInvalido: 'Escribe un número mayor que 0.',
+  exportarSinPerfil: 'Antes de exportar, configura tu máquina.',
+  // Solo para el modo avanzado del área.
+  noEsNumero: 'Escribe un número.',
+  xInvertido: 'xmax debe ser mayor que xmin.',
+  yInvertido: 'ymax debe ser mayor que ymin.',
+} as const;
 
 /** Perfil tal como viene del formulario o de localStorage (texto). */
 export interface PerfilCrudo {
@@ -36,7 +48,11 @@ export interface Perfil {
   config: ConfigMaquina;
 }
 
-export type ResultadoPerfil = { ok: true; perfil: Perfil } | { ok: false; errores: string[] };
+export type CampoPerfil = 'nombre' | 'sMax' | 'camaAncho' | 'camaAlto' | 'origen' | 'xMin' | 'yMin' | 'xMax' | 'yMax';
+
+export type ResultadoPerfil =
+  | { ok: true; perfil: Perfil }
+  | { ok: false; errores: string[]; porCampo: Partial<Record<CampoPerfil, string>> };
 
 const NUMERO = /^[-+]?(\d+(\.\d*)?|\.\d+)$/;
 
@@ -93,43 +109,74 @@ export function erroresConfigMaquina(c: ConfigMaquina | null | undefined): strin
   return e;
 }
 
+function vacio(v: unknown): boolean {
+  return v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
+}
+
 export function validarPerfil(crudo: PerfilCrudo | null | undefined): ResultadoPerfil {
   const c = crudo ?? {};
-  const errores: string[] = [];
+  const porCampo: Partial<Record<CampoPerfil, string>> = {};
+  const positivo = (campo: CampoPerfil): number | null => {
+    const v = c[campo];
+    if (vacio(v)) {
+      porCampo[campo] = MENSAJES.vacio;
+      return null;
+    }
+    const n = numeroPositivo(v);
+    if (n === null) porCampo[campo] = MENSAJES.numeroInvalido;
+    return n;
+  };
+  const finito = (campo: CampoPerfil): number | null => {
+    const v = c[campo];
+    if (vacio(v)) {
+      porCampo[campo] = MENSAJES.vacio;
+      return null;
+    }
+    const n = numeroFinito(v);
+    if (n === null) porCampo[campo] = MENSAJES.noEsNumero;
+    return n;
+  };
+
   const nombre = typeof c.nombre === 'string' ? c.nombre.trim() : '';
-  if (!nombre) errores.push('El nombre del perfil es obligatorio.');
-  const sMax = numeroPositivo(c.sMax);
-  if (sMax === null) errores.push('S máximo ($30) es obligatorio y debe ser un número mayor que 0.');
+  if (!nombre) porCampo.nombre = MENSAJES.vacio;
+  let sMax = positivo('sMax');
+  if (sMax !== null && Math.floor(sMax * 1000) < 1) {
+    porCampo.sMax = MENSAJES.numeroInvalido;
+    sMax = null;
+  }
   const origen = ORIGENES.find((o) => o.valor === c.origen)?.valor;
   let area: AreaTrabajo | null = null;
   if (!origen) {
-    errores.push('Elige la esquina del origen o un área personalizada.');
+    porCampo.origen = MENSAJES.vacio;
+    positivo('camaAncho');
+    positivo('camaAlto');
   } else if (origen === 'personalizada') {
-    const [xMin, yMin, xMax, yMax] = [c.xMin, c.yMin, c.xMax, c.yMax].map(numeroFinito);
-    if (xMin === null || yMin === null || xMax === null || yMax === null)
-      errores.push('xmin, ymin, xmax e ymax son obligatorios y deben ser números.');
-    else area = { xMin, yMin, xMax, yMax };
+    const [xMin, yMin, xMax, yMax] = (['xMin', 'yMin', 'xMax', 'yMax'] as const).map(finito);
+    if (xMin !== null && xMax !== null && xMax - xMin < 0.001) porCampo.xMax = MENSAJES.xInvertido;
+    if (yMin !== null && yMax !== null && yMax - yMin < 0.001) porCampo.yMax = MENSAJES.yInvertido;
+    if (xMin !== null && yMin !== null && xMax !== null && yMax !== null) area = { xMin, yMin, xMax, yMax };
   } else {
-    const ancho = numeroPositivo(c.camaAncho);
-    const alto = numeroPositivo(c.camaAlto);
-    if (ancho === null) errores.push('El ancho del área es obligatorio y debe ser un número mayor que 0.');
-    if (alto === null) errores.push('El alto del área es obligatorio y debe ser un número mayor que 0.');
+    const ancho = positivo('camaAncho');
+    const alto = positivo('camaAlto');
     if (ancho !== null && alto !== null) area = areaDesdeCama(ancho, alto, origen);
   }
-  if (sMax !== null && area !== null) {
+  const errores = Object.entries(porCampo).map(([campo, m]) => `${campo}: ${m}`);
+  if (errores.length === 0 && sMax !== null && area !== null) {
     const config: ConfigMaquina = { sMax, laserMode32: modoLaser(c.laserMode32), area };
-    errores.push(...erroresConfigMaquina(config));
-    if (errores.length === 0) return { ok: true, perfil: { nombre, config } };
+    const extra = erroresConfigMaquina(config);
+    if (extra.length === 0) return { ok: true, perfil: { nombre, config } };
+    errores.push(...extra);
   }
-  return { ok: false, errores };
+  return { ok: false, errores, porCampo };
 }
 
-/** Valores de fábrica de GRBL 1.1 ($30=1000, $32=0, $130=$131=200). No son los de ninguna máquina concreta. */
-export const PRESET_GRBL11: Required<Pick<PerfilCrudo, 'sMax' | 'laserMode32' | 'camaAncho' | 'camaAlto'>> = {
+/**
+ * Valores de fábrica de GRBL 1.1: solo $30=1000 y $32=0. El área, el origen y el
+ * nombre no se suponen: los escribe el usuario.
+ */
+export const PRESET_GRBL11: Required<Pick<PerfilCrudo, 'sMax' | 'laserMode32'>> = {
   sMax: '1000',
   laserMode32: '0',
-  camaAncho: '200',
-  camaAlto: '200',
 };
 
 /**

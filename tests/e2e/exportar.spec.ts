@@ -68,7 +68,22 @@ test.describe('primera vez', () => {
     await expect(page.getByTestId('origen')).toHaveValue('');
     await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
     await expect(page.getByTestId('cancelar-perfil')).toBeHidden();
-    await expect(page.getByTestId('errores')).toContainText('S máximo ($30)');
+    await expect(page.getByRole('heading', { name: 'Configura tu máquina' })).toBeVisible();
+    await expect(page.getByTestId('pantalla-maquina')).toContainText(
+      'ChopiLaser necesita saber cómo es tu láser antes de exportar. Solo se pide una vez; después lo cambias en «Máquina».',
+    );
+    await expect(page.getByLabel('Nombre de la máquina')).toHaveAttribute('placeholder', 'Ej. Láser del taller');
+    await expect(page.getByLabel('Potencia máxima ($30)')).toBeVisible();
+    await expect(page.getByLabel('Modo láser ($32)')).toBeVisible();
+    await expect(page.getByLabel('Ancho (X)')).toBeVisible();
+    await expect(page.getByLabel('Fondo (Y)')).toBeVisible();
+    await expect(page.getByLabel('¿Dónde queda el 0,0 después del homing?')).toBeVisible();
+    await expect(page.getByTestId('guardar-perfil')).toHaveText('Guardar y empezar');
+    await expect(page.getByTestId('errores')).toHaveText('Completa los campos marcados para continuar.');
+    await expect(page.getByTestId('error-nombre')).toHaveText('Este dato hace falta.');
+    await expect(page.getByTestId('error-sMax')).toHaveText('Este dato hace falta.');
+    await expect(page.getByTestId('error-camaAncho')).toHaveText('Este dato hace falta.');
+    await expect(page.getByTestId('error-origen')).toHaveText('Este dato hace falta.');
   });
 
   const valido = { nombre: 'Prueba', sMax: '1000', laserMode32: '', origen: 'inferior-izquierda', camaAncho: '400', camaAlto: '400' };
@@ -83,8 +98,15 @@ test.describe('primera vez', () => {
       for (const v of ['', '0', '-5', 'abc', 'NaN']) {
         await page.getByTestId(id).fill(v);
         await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
-        await expect(page.getByTestId('errores')).not.toBeEmpty();
+        await expect(page.getByTestId('errores')).toHaveText('Completa los campos marcados para continuar.');
+        await expect(page.getByTestId(`error-${campo}`)).toHaveText(
+          v === '' ? 'Este dato hace falta.' : 'Escribe un número mayor que 0.',
+        );
+        await expect(page.getByTestId(id)).toHaveAttribute('aria-invalid', 'true');
       }
+      await page.getByTestId(id).fill('100');
+      await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
+      await expect(page.getByTestId('errores')).toHaveText('');
       expect(await page.evaluate((k) => localStorage.getItem(k), CLAVE)).toBe(null);
     });
   }
@@ -107,13 +129,19 @@ test.describe('primera vez', () => {
     await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
   });
 
-  test('el botón de GRBL 1.1 rellena los valores de fábrica', async ({ page }) => {
+  test('el botón de GRBL 1.1 llena solo $30=1000 y $32=0', async ({ page }) => {
+    await expect(page.getByTestId('preset-grbl')).toHaveText('Usar valores de fábrica de GRBL 1.1');
+    await expect(page.getByTestId('pantalla-maquina')).toContainText(
+      'Llena $30=1000 y $32=0. El nombre, el área y el origen los pones tú.',
+    );
     await page.getByTestId('preset-grbl').click();
     await expect(page.getByTestId('s-max')).toHaveValue('1000');
     await expect(page.getByTestId('modo-32')).toHaveValue('0');
-    await expect(page.getByTestId('cama-ancho')).toHaveValue('200');
-    await expect(page.getByTestId('cama-alto')).toHaveValue('200');
-    // El nombre y el origen no se suponen.
+    // El área, el origen y el nombre no se suponen.
+    await expect(page.getByTestId('cama-ancho')).toHaveValue('');
+    await expect(page.getByTestId('cama-alto')).toHaveValue('');
+    await expect(page.getByTestId('origen')).toHaveValue('');
+    await expect(page.getByTestId('perfil-nombre')).toHaveValue('');
     await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
   });
 
@@ -125,6 +153,20 @@ test.describe('primera vez', () => {
     await expect(page.getByTestId('modo-32')).toHaveValue('1');
     await expect(page.getByTestId('cama-ancho')).toHaveValue('300');
     await expect(page.getByTestId('cama-alto')).toHaveValue('200');
+    await expect(page.getByTestId('dolar-estado')).toHaveText('Listo: se llenaron 4 valores. Revísalos antes de guardar.');
+  });
+
+  test('«Pegar salida de $$» avisa si no hay valores de GRBL', async ({ page }) => {
+    await page.getByText('Pegar salida de $$').click();
+    await expect(page.getByTestId('pantalla-maquina')).toContainText(
+      'Escribe $$ en la consola de tu máquina, copia todo lo que responda y pégalo aquí.',
+    );
+    await page.getByTestId('pegar-dolar').fill('hola, esto no es GRBL');
+    await page.getByTestId('leer-dolar').click();
+    await expect(page.getByTestId('dolar-estado')).toHaveText(
+      'No encontré valores de GRBL en el texto. Copia la respuesta completa de $$.',
+    );
+    await expect(page.getByTestId('s-max')).toHaveValue('');
   });
 
   test('después de guardar, al recargar ya no aparece la pantalla', async ({ page }) => {
@@ -186,7 +228,7 @@ test.describe('perfiles', () => {
       [CLAVE, CASOS[0].perfilPrueba] as const,
     );
     await page.getByTestId('exportar').click();
-    await expect(page.getByTestId('estado')).toContainText('Exportación bloqueada');
+    await expect(page.getByTestId('estado')).toHaveText('Antes de exportar, configura tu máquina.');
     await expect(page.getByTestId('exportar')).toBeDisabled();
   });
 });
