@@ -286,22 +286,95 @@ interface Estilo {
   visible: boolean;
 }
 
-function propiedad(el: Element, nombre: string): string | null {
-  const st = el.getAttribute('style');
-  if (st) {
-    for (const decl of st.split(';')) {
-      const i = decl.indexOf(':');
-      if (i > 0 && decl.slice(0, i).trim().toLowerCase() === nombre) return decl.slice(i + 1).replace(/!important/, '').trim();
+/** Regla CSS sencilla de un <style>: selectores de etiqueta, clase e id (y sus combinaciones). */
+interface ReglaCss {
+  etiqueta: string | null;
+  id: string | null;
+  clases: string[];
+  especificidad: number;
+  orden: number;
+  decl: Map<string, string>;
+}
+
+function declaraciones(texto: string): Map<string, string> {
+  const m = new Map<string, string>();
+  for (const decl of texto.split(';')) {
+    const i = decl.indexOf(':');
+    if (i > 0) m.set(decl.slice(0, i).trim().toLowerCase(), decl.slice(i + 1).replace(/!important/i, '').trim());
+  }
+  return m;
+}
+
+/**
+ * Lee las reglas de los <style> del documento (como los SVG de Illustrator: `.cls-1{stroke:#f00}`).
+ * Solo selectores simples: `etiqueta`, `.clase`, `#id` y combinaciones sin espacios, separados por
+ * comas. Se ignoran las reglas @ (como @media) y los selectores con descendientes o pseudoclases.
+ */
+export function leerHojaCss(css: string): ReglaCss[] {
+  const sin = css.replace(/\/\*[\s\S]*?\*\//g, '');
+  const reglas: ReglaCss[] = [];
+  let i = 0;
+  let orden = 0;
+  while (i < sin.length) {
+    const a = sin.indexOf('{', i);
+    if (a < 0) break;
+    const selector = sin.slice(i, a).trim();
+    // Cierre correspondiente (las reglas @ pueden anidar llaves).
+    let prof = 1;
+    let b = a + 1;
+    while (b < sin.length && prof > 0) {
+      if (sin[b] === '{') prof++;
+      else if (sin[b] === '}') prof--;
+      b++;
+    }
+    const cuerpo = sin.slice(a + 1, b - 1);
+    i = b;
+    if (selector.startsWith('@')) continue;
+    const decl = declaraciones(cuerpo);
+    for (const sel of selector.split(',').map((x) => x.trim())) {
+      const m = /^([a-zA-Z][\w-]*|\*)?((?:[.#][\w-]+)*)$/.exec(sel);
+      if (!m || !sel) continue;
+      const partes = m[2].match(/[.#][\w-]+/g) ?? [];
+      const ids = partes.filter((x) => x.startsWith('#')).map((x) => x.slice(1));
+      const clases = partes.filter((x) => x.startsWith('.')).map((x) => x.slice(1));
+      if (ids.length > 1) continue;
+      const etiqueta = m[1] && m[1] !== '*' ? m[1].toLowerCase() : null;
+      reglas.push({ etiqueta, id: ids[0] ?? null, clases, especificidad: (ids.length ? 100 : 0) + clases.length * 10 + (etiqueta ? 1 : 0), orden: orden++, decl });
     }
   }
+  return reglas;
+}
+
+function coincide(r: ReglaCss, el: Element): boolean {
+  if (r.etiqueta && el.localName.toLowerCase() !== r.etiqueta) return false;
+  if (r.id && el.getAttribute('id') !== r.id) return false;
+  if (r.clases.length) {
+    const cl = (el.getAttribute('class') ?? '').split(/\s+/);
+    if (!r.clases.every((c) => cl.includes(c))) return false;
+  }
+  return true;
+}
+
+/** Valor de una propiedad: `style` gana a la hoja <style>, que gana al atributo de presentación. */
+function propiedad(el: Element, nombre: string, hoja: readonly ReglaCss[] = []): string | null {
+  const st = el.getAttribute('style');
+  if (st) {
+    const v = declaraciones(st).get(nombre);
+    if (v !== undefined) return v;
+  }
+  let mejor: ReglaCss | null = null;
+  for (const r of hoja)
+    if (r.decl.has(nombre) && coincide(r, el) && (!mejor || r.especificidad > mejor.especificidad || (r.especificidad === mejor.especificidad && r.orden > mejor.orden)))
+      mejor = r;
+  if (mejor) return mejor.decl.get(nombre)!;
   return el.getAttribute(nombre);
 }
 
-function estiloDe(el: Element, padre: Estilo): Estilo {
-  const s = normalizarColor(propiedad(el, 'stroke'));
-  const f = normalizarColor(propiedad(el, 'fill'));
-  const disp = propiedad(el, 'display');
-  const vis = propiedad(el, 'visibility');
+function estiloDe(el: Element, padre: Estilo, hoja: readonly ReglaCss[] = []): Estilo {
+  const s = normalizarColor(propiedad(el, 'stroke', hoja));
+  const f = normalizarColor(propiedad(el, 'fill', hoja));
+  const disp = propiedad(el, 'display', hoja);
+  const vis = propiedad(el, 'visibility', hoja);
   return {
     stroke: s ?? padre.stroke,
     fill: f ?? padre.fill,
@@ -422,10 +495,13 @@ export function importarSvg(texto: string, parser: DOMParser = new DOMParser()):
   const figuras: FiguraImportada[] = [];
   const omitidos = new Set<string>();
   const ids = new Map<string, Element>();
+  const hoja: ReglaCss[] = [];
   for (const el of Array.from(doc.getElementsByTagName('*'))) {
     const id = el.getAttribute('id');
     if (id) ids.set(id, el);
+    if (el.localName.toLowerCase() === 'style') hoja.push(...leerHojaCss(el.textContent ?? ''));
   }
+  hoja.forEach((r, i) => (r.orden = i));
 
   const visitar = (el: Element, m: Matriz, estiloPadre: Estilo, profundidad: number) => {
     if (profundidad > 50) return;
@@ -434,7 +510,7 @@ export function importarSvg(texto: string, parser: DOMParser = new DOMParser()):
       if (tag === 'text' || tag === 'image') omitidos.add(tag);
       return;
     }
-    const estilo = estiloDe(el, estiloPadre);
+    const estilo = estiloDe(el, estiloPadre, hoja);
     if (!estilo.visible) return;
     let mm = multiplicar(m, leerTransform(el.getAttribute('transform')));
     if (tag === 'svg' && el !== raiz) {

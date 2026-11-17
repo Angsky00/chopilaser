@@ -34,7 +34,7 @@ import {
 import { Lienzo } from './lienzo';
 import { esImagen, montarVectorizar } from './vectorizar';
 
-/** Textos provisionales de la interfaz del proyecto (pendientes de Marketing). */
+/** Textos de la interfaz del proyecto. */
 export const TEXTOS_PROYECTO = {
   titulo: 'Proyecto',
   introInicio: 'Elige el material para empezar. Sus ajustes llenan las capas; si todavía están vacíos, llénalos con lo que te dio la cuadrícula de prueba.',
@@ -289,7 +289,7 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
   const estadoMat = h('p', { 'data-testid': 'materiales-estado', role: 'status' });
   panelMaterial.append(h('summary', { class: 'btn btn-ghost', text: T.ajustesMaterial }), h('p', { class: 'nota', text: T.ayudaAjustes }));
   for (const modo of ['corte', 'grabado'] as const) {
-    const fs = h('fieldset', {}, h('legend', { text: modo === 'corte' ? T.corte : T.grabado }));
+    const fs = h('fieldset', { class: 'ajustes-modo' }, h('legend', { text: modo === 'corte' ? T.corte : T.grabado }));
     const rej = h('div', { class: 'rejilla-props' });
     for (const [k, input] of Object.entries(ajustes[modo])) {
       input.id = `ajuste-${modo}-${k}`;
@@ -454,8 +454,8 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
     const r = trabajoDesdeProyecto(proyecto, areaActual());
     estadoExportar.dataset.ruta = '';
     if (r.ok) {
-      estadoExportar.textContent = '';
-      estadoExportar.className = '';
+      estadoExportar.textContent = r.avisos.join(' ');
+      estadoExportar.className = r.avisos.length ? 'aviso-exportar' : '';
     } else {
       estadoExportar.textContent = r.error;
       estadoExportar.className = 'errores';
@@ -490,7 +490,7 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
     }
     try {
       const ruta = await exportarGcode(texto, 'proyecto.gcode');
-      estadoExportar.textContent = ruta === 'selector' ? T.exportado : ruta === 'descarga' ? T.descargado : T.cancelado;
+      estadoExportar.textContent = [ruta === 'selector' ? T.exportado : ruta === 'descarga' ? T.descargado : T.cancelado, ...r.avisos].join(' ');
       estadoExportar.className = ruta === 'cancelada' ? '' : 'ok';
       estadoExportar.dataset.ruta = ruta;
     } catch {

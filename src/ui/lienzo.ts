@@ -2,7 +2,7 @@
 // pointer events (ratón y táctil). Las coordenadas del diseño tienen Y hacia arriba.
 import type { Punto } from '../gcode/types';
 import { aplicar, rotacion } from '../diseno/geometria';
-import { matrizFigura, cajaFigura, figuraFuera, type CapaProyecto, type Figura } from '../diseno/proyecto';
+import { matrizFigura, cajaFigura, figuraFuera, trazosMundo, type CapaProyecto, type Figura } from '../diseno/proyecto';
 import {
   cajaSeleccion,
   escalarDesdeTirador,
@@ -27,6 +27,18 @@ const MIN_ZOOM_RELATIVO = 0.5;
 const PASOS_REGLA = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
 /** Tamaño de los tiradores en px de pantalla. */
 const TIRADOR_PX = 14;
+/** Radio del centro del tirador que gana siempre, aunque haya una figura sin seleccionar debajo. */
+const TIRADOR_CENTRO_PX = 3.5;
+/** Distancia al trazo (px de pantalla) que cuenta como tocar la figura (la mitad del trazo de toque). */
+const TOQUE_PX = 5;
+
+function distanciaSegmento(p: Punto, a: Punto, b: Punto): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const l = dx * dx + dy * dy;
+  const t = l ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l)) : 0;
+  return Math.hypot(p.x - a.x - t * dx, p.y - a.y - t * dy);
+}
 /** Desplazamiento mínimo (px) para que un toque cuente como arrastre. */
 const UMBRAL_PX = 3;
 
@@ -403,8 +415,16 @@ export class Lienzo {
     }
     const p = this.aDiseno(e);
     const objetivo = e.target as Element;
-    const tirador = objetivo.closest('[data-tirador]')?.getAttribute('data-tirador');
-    const idFigura = objetivo.closest('[data-id]')?.getAttribute('data-id') ?? null;
+    let tirador = objetivo.closest('[data-tirador]')?.getAttribute('data-tirador');
+    let idFigura = objetivo.closest('[data-id]')?.getAttribute('data-id') ?? null;
+    if (tirador) {
+      // Si el tirador tapa una figura sin seleccionar, gana la figura salvo en el centro del tirador.
+      const debajo = this.figuraNoSeleccionadaEn(p);
+      if (debajo && !this.enCentroDeTirador(objetivo.closest('[data-tirador]')!, p)) {
+        tirador = undefined;
+        idFigura = debajo;
+      }
+    }
     if (tirador === 'giro') {
       const s = this.figuras.filter((f) => this.sel.has(f.id));
       const c = s.length === 1 ? { x: s[0].x, y: s[0].y } : (() => { const b = cajaSeleccion(this.figuras, this.sel)!; return { x: (b.xMin + b.xMax) / 2, y: (b.yMin + b.yMax) / 2 }; })();
@@ -434,6 +454,34 @@ export class Lienzo {
     this.inicioPx = { x: e.clientX, y: e.clientY };
     this.svg.setPointerCapture(e.pointerId);
     e.preventDefault();
+  }
+
+  /**
+   * Id de una figura sin seleccionar cuyo trazo pasa cerca del punto (o que es más pequeña que un
+   * tirador y lo contiene). Así un tirador grande no impide elegir figuras vecinas; el relleno
+   * de una figura grande que rodea la selección no cuenta.
+   */
+  private figuraNoSeleccionadaEn(p: Punto): string | null {
+    const mmPx = this.mmPorPx();
+    const radio = TOQUE_PX * mmPx;
+    const tirador = TIRADOR_PX * mmPx;
+    for (let k = this.figuras.length - 1; k >= 0; k--) {
+      const f = this.figuras[k];
+      if (this.sel.has(f.id) || !this.visible(f)) continue;
+      const c = cajaFigura(f);
+      if (!c || p.x < c.xMin - radio || p.x > c.xMax + radio || p.y < c.yMin - radio || p.y > c.yMax + radio) continue;
+      if (c.xMax - c.xMin < tirador && c.yMax - c.yMin < tirador) return f.id;
+      for (const t of trazosMundo(f))
+        for (let i = 1; i < t.puntos.length; i++) if (distanciaSegmento(p, t.puntos[i - 1], t.puntos[i]) <= radio) return f.id;
+    }
+    return null;
+  }
+
+  /** true si el punto (en mm de diseño) cae en el centro del tirador (radio TIRADOR_CENTRO_PX). */
+  private enCentroDeTirador(t: Element, p: Punto): boolean {
+    const n = (k: string) => Number(t.getAttribute(k) ?? 0);
+    const c = t.localName === 'circle' ? { x: n('cx'), y: n('cy') } : { x: n('x') + n('width') / 2, y: n('y') + n('height') / 2 };
+    return Math.hypot(p.x - c.x, p.y - c.y) <= TIRADOR_CENTRO_PX * this.mmPorPx();
   }
 
   private empezarPan(e: PointerEvent): void {

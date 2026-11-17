@@ -31,7 +31,7 @@ const CAMPOS_CORTE = ['potencia', 'velocidad', 'pasadas'] as const;
 const CAMPOS_GRABADO = ['potencia', 'velocidad', 'pasadas', 'intervalo'] as const;
 const esObjeto = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
-/** Textos provisionales (pendientes de Marketing). */
+/** Textos de la interfaz. */
 export const TEXTOS_MATERIAL = {
   nombreVacio: 'Escribe el nombre del material.',
   nombreLargo: `El nombre puede tener hasta ${MAX_NOMBRE} caracteres.`,
@@ -114,7 +114,7 @@ export function exportarMateriales(materiales: Material[]): string {
   return JSON.stringify({ formato: FORMATO_MATERIALES, version: VERSION_MATERIALES, materiales }, null, 2) + '\n';
 }
 
-/** Textos provisionales (pendientes de Marketing). */
+/** Textos de la interfaz. */
 export const TEXTOS_IMPORTAR_MATERIALES = {
   error: (motivo: string) => `No se importó nada: ${motivo}`,
   noJson: 'el archivo no es JSON válido.',

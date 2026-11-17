@@ -201,3 +201,38 @@ describe('formas y colores', () => {
     expect(() => importarSvg('no es xml')).toThrow();
   });
 });
+
+describe('color: precedencia (stroke gana a fill; style gana al atributo; hoja <style>)', () => {
+  const colores = (cuerpo: string) => importarSvg(svg(cuerpo)).figuras.map((f) => f.color);
+
+  it('con stroke y fill a la vez, manda el stroke (en atributos y en style)', () => {
+    expect(colores('<rect width="5" height="5" fill="#00ff00" stroke="#ff0000"/>')).toEqual(['#ff0000']);
+    expect(colores('<rect width="5" height="5" style="fill:#00ff00;stroke:#0000ff"/>')).toEqual(['#0000ff']);
+    // Grupo: el hijo solo tiene fill, el stroke heredado sigue mandando.
+    expect(colores('<g stroke="#ff0000"><rect width="5" height="5" fill="#00ff00"/></g>')).toEqual(['#ff0000']);
+  });
+
+  it('style gana al atributo de presentación', () => {
+    expect(colores('<rect width="5" height="5" stroke="#ff0000" style="stroke:#0000ff"/>')).toEqual(['#0000ff']);
+    expect(colores('<rect width="5" height="5" fill="#ff0000" style="fill:#00ff00"/>')).toEqual(['#00ff00']);
+    // style: stroke:none deja paso al fill aunque el atributo diga otra cosa.
+    expect(colores('<rect width="5" height="5" stroke="#ff0000" fill="#0000ff" style="stroke:none"/>')).toEqual(['#0000ff']);
+  });
+
+  it('lee colores de reglas de clase, etiqueta e id de <style> (SVG de Illustrator)', () => {
+    const cuerpo =
+      '<defs><style>/* Illustrator */ .cls-1{fill:none;stroke:#f00;stroke-miterlimit:10}.cls-2,.cls-3{fill:#00f}' +
+      ' circle{stroke:#0f0} #especial{stroke:#ff00ff} @media print{.cls-1{stroke:#123456}}</style></defs>' +
+      '<rect class="cls-1" width="5" height="5"/><path class="cls-3" d="M0 0 H5 V5 Z"/><circle cx="20" cy="20" r="3"/>' +
+      '<circle id="especial" class="cls-2" cx="30" cy="20" r="3"/><rect class="otra cls-1" x="40" width="5" height="5"/>';
+    expect(colores(cuerpo)).toEqual(['#ff0000', '#0000ff', '#00ff00', '#ff00ff', '#ff0000']);
+  });
+
+  it('style en línea gana a la hoja, y la hoja gana al atributo', () => {
+    const hoja = '<style>.c{stroke:#ff0000}</style>';
+    expect(colores(`${hoja}<rect class="c" stroke="#00ff00" width="5" height="5"/>`)).toEqual(['#ff0000']);
+    expect(colores(`${hoja}<rect class="c" style="stroke:#0000ff" width="5" height="5"/>`)).toEqual(['#0000ff']);
+    // Misma especificidad: gana la regla posterior; más especificidad gana aunque vaya antes.
+    expect(colores('<style>rect.c{stroke:#00f} .c{stroke:#f00} .c{stroke:#0f0}</style><rect class="c" width="5" height="5"/>')).toEqual(['#0000ff']);
+  });
+});

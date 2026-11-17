@@ -77,22 +77,29 @@ de referencia, sin `--laser-mode`, con `--max-s` y `--area=` de cada perfil de p
   96 ppp). DXF con [dxf-parser](https://github.com/gdsestimating/dxf-parser) (MIT): `LINE`,
   `LWPOLYLINE`/`POLYLINE` con bulge, `ARC`, `CIRCLE`, `ELLIPSE`, `SPLINE` (no racional) e `INSERT`;
   unidades según `$INSUNITS` (sin unidades se supone mm). Las curvas se aplanan con una tolerancia de
-  0,02 mm. Textos e imágenes no se importan y se avisa.
+  0,02 mm. Textos e imágenes no se importan y se avisa. Los colores salen de `stroke` (si no, de
+  `fill`), con este orden: `style` del elemento, reglas de `<style>` (selectores simples de
+  etiqueta, `.clase` e `#id`, como los de Illustrator) y atributos.
 - **Lienzo** con el área de trabajo del perfil en mm: seleccionar (clic, Mayús+clic, recuadro,
   Ctrl+A), mover (arrastre o flechas), escalar y girar con ratón o táctil, campos
   X/Y/ancho/alto/ángulo y borrar. **Zoom** con la rueda, el pellizco (trackpad o dos dedos) o + y −;
   **mover la vista** arrastrando con la barra espaciadora, con el botón central o con dos dedos;
   «Ajustar» (o 0) vuelve a ver toda el área. Las reglas siguen la vista.
 - **Capas por color de trazo:** corte (sigue el trazo, M3) o grabado (relleno por líneas, M4), con
-  potencia, velocidad, pasadas e intervalo; se pueden ocultar o quitar de la salida.
+  potencia (de 1 a 100 %), velocidad, pasadas e intervalo; se pueden ocultar o quitar de la salida.
+  Los trazos abiertos se cortan como líneas en las capas de corte; en el grabado no se rellenan y
+  al exportar se avisa cuántos quedaron fuera del relleno.
 - **Materiales:** se elige uno al empezar el proyecto. Sus ajustes por modo empiezan vacíos (no se
   inventan valores): se llenan con lo que dé la cuadrícula de prueba. Se guardan en localStorage
   (`chopilaser.materiales.v1`) y se exportan/importan en `.json` con validación estricta
   (`formato: "chopilaser-materiales"`, `version: 1`, hasta 200 materiales y 1 MB).
 - **Exportar:** siempre con el generador seguro de la fase 0 y el perfil guardado en ese momento.
   Se bloquea, con un mensaje, si una figura de una capa con salida queda fuera del área o si una
-  capa está incompleta. Primero van las capas de grabado y luego las de corte; dentro del corte,
-  los trazos pequeños primero.
+  capa está incompleta. Primero van las capas de grabado y luego todo el corte. El corte se ordena
+  junto, aunque venga de figuras o capas distintas: lo que está dentro de un contorno cerrado
+  (agujeros, marcas, trazos abiertos) se corta antes que ese contorno, de lo más hondo hacia
+  fuera y, a igual profundidad, de menor a mayor área. Cada trazo conserva la potencia,
+  velocidad y pasadas de su capa.
 
 Dependencias: `dxf-parser` (MIT, con `loglevel`, MIT) se incluye en la app; `happy-dom` (MIT) solo
 se usa en las pruebas.

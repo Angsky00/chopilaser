@@ -4,6 +4,7 @@ import type { Capa, Polilinea, Trabajo } from '../gcode/types';
 import { aMilesimas } from '../gcode/formato';
 import {
   aplicar,
+  areaPoligono,
   cajaDePuntos,
   cajaDeTrazos,
   multiplicar,
@@ -16,6 +17,7 @@ import {
   type Trazo,
 } from './geometria';
 import { trama } from './trama';
+import type { Punto } from '../gcode/types';
 import type { ResultadoImportacion } from '../importar/tipos';
 
 export interface Figura {
@@ -138,9 +140,9 @@ export const LIMITES_CAPA = {
 const NUM = /^\d+(\.\d+)?$/;
 const ENTERO = /^\d+$/;
 
-/** Textos provisionales (pendientes de Marketing). */
+/** Textos de la interfaz. */
 export const TEXTOS_CAPA = {
-  potencia: 'Potencia: escribe un número de 0 a 100.',
+  potencia: 'Potencia: escribe un número de 1 a 100.',
   velocidad: `Velocidad: escribe un número mayor que 0 y hasta ${LIMITES_CAPA.velocidadMax}.`,
   pasadas: `Pasadas: escribe un entero de 1 a ${LIMITES_CAPA.pasadasMax}.`,
   intervalo: `Intervalo: escribe un número de ${LIMITES_CAPA.intervaloMin} a ${LIMITES_CAPA.intervaloMax} mm.`,
@@ -159,7 +161,7 @@ export function validarCapa(c: CapaProyecto): { ok: true; capa: CapaValida } | {
   const porCampo: Partial<Record<CampoCapa, string>> = {};
   const t = (v: string) => v.trim();
   const potencia = NUM.test(t(c.potencia)) ? Number(t(c.potencia)) : NaN;
-  if (!(potencia >= 0 && potencia <= 100)) porCampo.potencia = TEXTOS_CAPA.potencia;
+  if (!(potencia >= 1 && potencia <= 100)) porCampo.potencia = TEXTOS_CAPA.potencia;
   const velocidad = NUM.test(t(c.velocidad)) ? Number(t(c.velocidad)) : NaN;
   if (!(velocidad > 0 && velocidad <= LIMITES_CAPA.velocidadMax) || aMilesimas(velocidad) < 1) porCampo.velocidad = TEXTOS_CAPA.velocidad;
   const pasadas = ENTERO.test(t(c.pasadas)) ? Number(t(c.pasadas)) : NaN;
@@ -183,7 +185,7 @@ export function figuraFuera(f: Figura, area: { ancho: number; alto: number }): b
   return trazosMundo(f).some((t) => t.puntos.some((p) => !dentro(p.x, area.ancho) || !dentro(p.y, area.alto)));
 }
 
-/** Textos provisionales (pendientes de Marketing). */
+/** Textos de la interfaz. */
 export const TEXTOS_EXPORTAR = {
   sinFiguras: 'No hay nada que exportar: importa un diseño o activa la salida de alguna capa.',
   fuera: (n: number) =>
@@ -191,14 +193,78 @@ export const TEXTOS_EXPORTAR = {
       ? 'Hay 1 figura fuera del área de trabajo. Muévela o achícala para poder exportar.'
       : `Hay ${n} figuras fuera del área de trabajo. Muévelas o achícalas para poder exportar.`,
   capaIncompleta: (n: number) => `Completa los ajustes de la capa ${n} para poder exportar.`,
+  abiertosEnGrabado: (m: number, n: number) =>
+    m === 1
+      ? `El relleno no incluye 1 trazo abierto de la capa ${n}. Ciérralos o pásalos a una capa de corte.`
+      : `El relleno no incluye ${m} trazos abiertos de la capa ${n}. Ciérralos o pásalos a una capa de corte.`,
 } as const;
 
-export type ResultadoTrabajo = { ok: true; trabajo: Trabajo } | { ok: false; error: string; fuera: string[] };
+export type ResultadoTrabajo =
+  | { ok: true; trabajo: Trabajo; avisos: string[] }
+  | { ok: false; error: string; fuera: string[] };
+
+/** Trayecto de corte con los ajustes de su capa, para ordenarlo con los de todas las capas. */
+interface Corte {
+  puntos: Punto[];
+  cerrado: boolean;
+  capa: Capa;
+  /** Índice de la capa en el proyecto (para agrupar tramos seguidos de la misma capa). */
+  indice: number;
+  caja: Caja;
+  area: number;
+  orden: number;
+}
+
+function puntoDentro(p: Punto, poli: readonly Punto[]): boolean {
+  let dentro = false;
+  for (let i = 0, j = poli.length - 1; i < poli.length; j = i++) {
+    const a = poli[i];
+    const b = poli[j];
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) dentro = !dentro;
+  }
+  return dentro;
+}
+
+/** true si el trayecto `t` está dentro del trayecto cerrado `c` (caja contenida y sus puntos dentro). */
+function contenidoEn(t: Corte, c: Corte): boolean {
+  if (t === c || !c.cerrado) return false;
+  const a = t.caja;
+  const b = c.caja;
+  if (a.xMin < b.xMin || a.yMin < b.yMin || a.xMax > b.xMax || a.yMax > b.yMax) return false;
+  if (a.xMin === b.xMin && a.yMin === b.yMin && a.xMax === b.xMax && a.yMax === b.yMax && t.area >= c.area) return false;
+  // Basta con que la mayoría de los puntos (muestreados) caigan dentro: tolera puntos sobre el borde.
+  const paso = Math.max(1, Math.floor(t.puntos.length / 16));
+  let dentro = 0;
+  let total = 0;
+  for (let i = 0; i < t.puntos.length; i += paso) {
+    total++;
+    if (puntoDentro(t.puntos[i], c.puntos)) dentro++;
+  }
+  return dentro * 2 > total;
+}
 
 /**
- * Trabajo para el generador con las capas visibles y con salida activa. Primero las capas
- * de grabado y después las de corte (así la pieza no se mueve antes de grabarla); dentro de
- * cada capa de corte, primero los trazos más pequeños (los agujeros antes que el contorno).
+ * Orden global de corte (todas las capas de corte juntas): un trayecto que está dentro de otro
+ * cerrado se corta antes que él. Se ordena por profundidad de anidado (lo más hondo primero) y,
+ * a igual profundidad, por área (lo más pequeño primero; los abiertos cuentan con área 0).
+ */
+export function ordenarCortes<T extends { puntos: Punto[]; cerrado: boolean }>(trayectos: readonly T[]): T[] {
+  const cs = trayectos.map((t, orden) => {
+    const caja = cajaDePuntos(t.puntos)!;
+    return { t, c: { puntos: t.puntos, cerrado: t.cerrado, caja, area: t.cerrado ? Math.abs(areaPoligono(t.puntos)) : 0, orden } as Corte };
+  });
+  const prof = cs.map(({ c }) => cs.reduce((n, o) => (contenidoEn(c, o.c) ? n + 1 : n), 0));
+  return cs
+    .map((x, i) => ({ ...x, prof: prof[i] }))
+    .sort((a, b) => b.prof - a.prof || a.c.area - b.c.area || a.c.orden - b.c.orden)
+    .map((x) => x.t);
+}
+
+/**
+ * Trabajo para el generador con las capas visibles y con salida activa. Primero las capas de
+ * grabado y después todo el corte. El corte se ordena junto, aunque venga de figuras o capas
+ * distintas: lo que está dentro de un contorno (agujeros, marcas) se corta antes que ese
+ * contorno; cada trayecto conserva la potencia, velocidad y pasadas de su capa.
  */
 export function trabajoDesdeProyecto(p: Proyecto, area: { ancho: number; alto: number }): ResultadoTrabajo {
   const activas = p.capas.map((c, i) => ({ c, i })).filter(({ c }) => c.visible && c.salida);
@@ -208,26 +274,39 @@ export function trabajoDesdeProyecto(p: Proyecto, area: { ancho: number; alto: n
   const fuera = conFiguras.flatMap(({ c }) => figurasDe(c.color).filter((f) => figuraFuera(f, area)).map((f) => f.id));
   if (fuera.length) return { ok: false, error: TEXTOS_EXPORTAR.fuera(fuera.length), fuera };
   for (const { c, i } of conFiguras) if (!validarCapa(c).ok) return { ok: false, error: TEXTOS_EXPORTAR.capaIncompleta(i + 1), fuera: [] };
-  const orden = [...conFiguras.filter(({ c }) => c.modo === 'grabado'), ...conFiguras.filter(({ c }) => c.modo === 'corte')];
-  const capas = orden.map(({ c }) => {
+  const capaDe = (c: CapaProyecto): { capa: Capa; intervalo: number } => {
     const v = validarCapa(c);
     if (!v.ok) throw new Error('inalcanzable');
-    const capa: Capa = { potencia: v.capa.potencia, velocidad: v.capa.velocidad, pasadas: v.capa.pasadas, modo: c.modo === 'corte' ? 'M3' : 'M4' };
-    let trayectorias: Polilinea[] = [];
-    for (const f of figurasDe(c.color)) {
-      const mundo = trazosMundo(f);
-      if (c.modo === 'corte') {
-        const ordenados = mundo
-          .map((t) => ({ t, c: cajaDePuntos(t.puntos)! }))
-          .sort((a, b) => (a.c.xMax - a.c.xMin) * (a.c.yMax - a.c.yMin) - (b.c.xMax - b.c.xMin) * (b.c.yMax - b.c.yMin));
-        trayectorias.push(...ordenados.map(({ t }) => t.puntos));
-      } else {
-        const cerrados = mundo.filter((t) => t.cerrado).map((t) => t.puntos.slice(0, -1));
-        trayectorias.push(...trama(cerrados, v.capa.intervalo));
-      }
-    }
-    trayectorias = trayectorias.filter((t) => t.length >= 2);
-    return { capa, trayectorias };
-  });
-  return { ok: true, trabajo: { capas } };
+    return {
+      capa: { potencia: v.capa.potencia, velocidad: v.capa.velocidad, pasadas: v.capa.pasadas, modo: c.modo === 'corte' ? 'M3' : 'M4' },
+      intervalo: v.capa.intervalo,
+    };
+  };
+  const avisos: string[] = [];
+  const capas: Trabajo['capas'] = [];
+  for (const { c, i } of conFiguras.filter(({ c }) => c.modo === 'grabado')) {
+    const { capa, intervalo } = capaDe(c);
+    const mundo = figurasDe(c.color).flatMap((f) => trazosMundo(f));
+    const abiertos = mundo.filter((t) => !t.cerrado && t.puntos.length >= 2).length;
+    if (abiertos) avisos.push(TEXTOS_EXPORTAR.abiertosEnGrabado(abiertos, i + 1));
+    const cerrados = mundo.filter((t) => t.cerrado).map((t) => t.puntos.slice(0, -1));
+    capas.push({ capa, trayectorias: trama(cerrados, intervalo).filter((t) => t.length >= 2) });
+  }
+  const cortes = conFiguras
+    .filter(({ c }) => c.modo === 'corte')
+    .flatMap(({ c, i }) => {
+      const { capa } = capaDe(c);
+      return figurasDe(c.color).flatMap((f) =>
+        trazosMundo(f)
+          .filter((t) => t.puntos.length >= 2)
+          .map((t) => ({ puntos: t.puntos, cerrado: t.cerrado, capa, indice: i })),
+      );
+    });
+  // Tramos seguidos de la misma capa van juntos (el generador repite las pasadas por tramo).
+  for (const t of ordenarCortes(cortes)) {
+    const ultima = capas[capas.length - 1] as (Trabajo['capas'][number] & { indice?: number }) | undefined;
+    if (ultima && ultima.indice === t.indice && ultima.capa.modo === 'M3') ultima.trayectorias.push(t.puntos);
+    else capas.push(Object.assign({ capa: t.capa, trayectorias: [t.puntos] as Polilinea[] }, { indice: t.indice }));
+  }
+  return { ok: true, trabajo: { capas: capas.map(({ capa, trayectorias }) => ({ capa, trayectorias })) }, avisos };
 }

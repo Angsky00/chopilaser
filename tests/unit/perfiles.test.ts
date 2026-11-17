@@ -71,7 +71,7 @@ describe('exportar e importar perfiles', () => {
     ['$30 = 0', archivo({ perfiles: [A, { ...A, nombre: 'A2', sMax: '0' }] }), 'el perfil 2 no es válido (Potencia máxima: Escribe un número mayor que 0.)'],
     ['coma', archivo({ perfiles: [{ ...A, camaAncho: '1,5' }] }), 'el perfil 1 no es válido (Ancho (X): Escribe un número.)'],
     ['tope', archivo({ perfiles: [{ ...A, sMax: '200000' }] }), 'el perfil 1 no es válido (Potencia máxima: Escribe un número mayor que 0 y hasta 100000.)'],
-    ['$32 raro', archivo({ perfiles: [{ ...A, laserMode32: '5' }] }), 'el perfil 1 no es válido (Modo láser: debe ser 0 o 1)'],
+    ['$32 raro', archivo({ perfiles: [{ ...A, laserMode32: '5' }] }), 'el perfil 1 no es válido (Modo láser: Escribe 0 o 1.)'],
     ['$23 raro', archivo({ perfiles: [{ ...B, homing23: '1e3' }] }), 'el perfil 1 tiene un $23 que no es válido.'],
     ['sin nombre', archivo({ perfiles: [{ ...A, nombre: ' ' }] }), 'el perfil 1 no es válido (Nombre de la máquina: Este dato hace falta.)'],
   ];
