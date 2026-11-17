@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# Perfiles de PRUEBA para el validador (los mismos de tests/golden/configs.json).
+# NO son los valores de la máquina de Angel: $30 y $32 reales siguen pendientes.
+#   a: sMax 1000, origen abajo a la izquierda, área 0,0 a la cama
+#   b: sMax 255, origen arriba a la derecha, área negativa
+#   c: S de 0 a 1 (tipo Smoothie), área personalizada
+
+jobs:
+  linux:
+    name: Linux (Chromium + Firefox), perfil de prueba ${{ matrix.perfil }} (sMax ${{ matrix.max_s }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - perfil: a
+            max_s: "1000"
+            area: "0,0,400,400"
+          - perfil: b
+            max_s: "255"
+            area: "-300,-200,0,0"
+          - perfil: c
+            max_s: "1"
+            area: "10,20,310,220"
+    env:
+      # VALORES DE PRUEBA, no son los de la máquina de Angel.
+      PERFIL_PRUEBA: ${{ matrix.perfil }}
+      MAX_S_PRUEBA: ${{ matrix.max_s }}
+      AREA_PRUEBA: ${{ matrix.area }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: Vitest
+        run: npx vitest run
+      - name: Validador de QA (pytest)
+        run: |
+          python -m pip install pytest
+          python -m pytest -q tools/tests
+      - name: Validador sobre el golden (sin --laser-mode)
+        shell: bash
+        run: python tools/gcode_lint.py --max-s "$MAX_S_PRUEBA" --area="$AREA_PRUEBA" tests/golden/cuadricula_"$PERFIL_PRUEBA"_*.gcode
+      - name: Build
+        run: npm run build
+      - name: Navegadores de Playwright
+        run: npx playwright install --with-deps chromium firefox
+      - name: Playwright (Chromium y Firefox)
+        run: npx playwright test --project=chromium --project=firefox
+      - uses: actions/upload-artifact@v4
+        if: matrix.perfil == 'a'
+        with:
+          name: chopilaser-dist
+          path: dist/
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-linux-${{ matrix.perfil }}
+          path: playwright-report/
+
+  windows:
+    name: Windows (Edge, prueba rápida), perfil de prueba ${{ matrix.perfil }} (sMax ${{ matrix.max_s }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - perfil: a
+            max_s: "1000"
+            area: "0,0,400,400"
+          - perfil: b
+            max_s: "255"
+            area: "-300,-200,0,0"
+          - perfil: c
+            max_s: "1"
+            area: "10,20,310,220"
+    env:
+      # VALORES DE PRUEBA, no son los de la máquina de Angel.
+      PERFIL_PRUEBA: ${{ matrix.perfil }}
+      MAX_S_PRUEBA: ${{ matrix.max_s }}
+      AREA_PRUEBA: ${{ matrix.area }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: Validador de QA (pytest)
+        run: |
+          python -m pip install pytest
+          python -m pytest -q tools/tests
+      - name: Validador sobre el golden (sin --laser-mode)
+        shell: bash
+        run: python tools/gcode_lint.py --max-s "$MAX_S_PRUEBA" --area="$AREA_PRUEBA" tests/golden/cuadricula_"$PERFIL_PRUEBA"_*.gcode
+      - name: Playwright (Edge)
+        run: npx playwright test --project=msedge
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-windows-${{ matrix.perfil }}
+          path: playwright-report/
+
+  pages:
+    name: Publicar en GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/
+      - id: deploy
+        uses: actions/deploy-pages@v4

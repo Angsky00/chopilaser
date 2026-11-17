@@ -1,0 +1,4 @@
+# Fin de línea LF en todo el repo (también al clonar en Windows).
+* text=auto eol=lf
+# Los goldens se comparan byte por byte: nunca convertir.
+*.gcode -text

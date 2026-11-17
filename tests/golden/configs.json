@@ -1,0 +1,49 @@
+{
+  "_nota": "PERFILES DE PRUEBA. No son los valores reales de la máquina de Angel ($30 y $32 reales siguen pendientes).",
+  "goldens": [
+    {
+      "perfil": "a",
+      "descripcion": "sMax 1000, origen abajo a la izquierda, área 0,0 a la cama",
+      "archivo": "cuadricula_a_s1000.gcode",
+      "perfilPrueba": {
+        "nombre": "Prueba A (sMax 1000)",
+        "sMax": "1000",
+        "laserMode32": "",
+        "origen": "inferior-izquierda",
+        "camaAncho": "400",
+        "camaAlto": "400"
+      },
+      "area": [0, 0, 400, 400]
+    },
+    {
+      "perfil": "b",
+      "descripcion": "sMax 255, origen arriba a la derecha, área negativa",
+      "archivo": "cuadricula_b_s255.gcode",
+      "perfilPrueba": {
+        "nombre": "Prueba B (sMax 255, área negativa)",
+        "sMax": "255",
+        "laserMode32": "1",
+        "origen": "superior-derecha",
+        "camaAncho": "300",
+        "camaAlto": "200"
+      },
+      "area": [-300, -200, 0, 0]
+    },
+    {
+      "perfil": "c",
+      "descripcion": "S de 0 a 1 (tipo Smoothie), área personalizada",
+      "archivo": "cuadricula_c_s1.gcode",
+      "perfilPrueba": {
+        "nombre": "Prueba C (S de 0 a 1)",
+        "sMax": "1",
+        "laserMode32": "0",
+        "origen": "personalizada",
+        "xMin": "10",
+        "yMin": "20",
+        "xMax": "310",
+        "yMax": "220"
+      },
+      "area": [10, 20, 310, 220]
+    }
+  ]
+}
