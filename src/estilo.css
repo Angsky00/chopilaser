@@ -340,7 +340,15 @@ input[readonly] { border-style: dashed; }
 .lienzo .area { fill: var(--lienzo-area); }
 .lienzo .rejilla line { stroke: var(--lienzo-rejilla); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .lienzo .rejilla line.mayor { stroke: var(--lienzo-rejilla-mayor); }
+.lienzo .reglas { pointer-events: none; }
+.lienzo .reglas .banda { fill: var(--bg-inset); opacity: 0.92; }
 .lienzo .reglas text { fill: var(--text-mute); font-family: var(--font-ui); }
+.lienzo .rejilla .fina { display: none; }
+.lienzo.con-detalle .rejilla .fina { display: inline; }
+.lienzo .rejilla .fina line { stroke: var(--lienzo-rejilla); stroke-width: 0.5; }
+.vista-lienzo { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.vista-lienzo .btn, .tarjeta .vista-lienzo .btn { flex: 0 0 auto; min-width: 44px; min-height: 40px; }
+.tarjeta .vista-lienzo .btn[data-testid="ajustar-vista"] { flex: 1 1 auto; }
 .lienzo .figura { cursor: move; }
 .lienzo .figura .trazo { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
 .lienzo .figura .toque { fill: transparent; stroke: transparent; stroke-width: 10; vector-effect: non-scaling-stroke; }

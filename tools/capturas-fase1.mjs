@@ -29,12 +29,12 @@ const PERFIL = { nombre: 'Láser de prueba', sMax: '1000', laserMode32: '1', ori
 
 const navegador = await chromium.launch();
 const problemas = [];
-async function foto(page, nombre) {
+async function foto(page, nombre, selector = '#proyecto') {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(150);
   const desborde = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   if (desborde > 0) problemas.push(`${nombre}: desborda ${desborde}px en horizontal`);
-  await page.locator('#proyecto').screenshot({ path: join(SALIDA, nombre) });
+  await page.locator(selector).screenshot({ path: join(SALIDA, nombre) });
   console.log('captura', join('capturas/fase-1', nombre));
 }
 
@@ -58,6 +58,39 @@ for (const ancho of [1280, 390]) {
   await p.getByTestId('lienzo').focus();
   for (let i = 0; i < 10; i++) await p.keyboard.press('Shift+ArrowRight');
   await foto(p, `lienzo-importado_${ancho}.png`);
+
+  // Selección con recuadro alrededor del llavero (0..60 x 0..30 mm) y zoom x2 sobre él.
+  const aPantalla = (x, y) =>
+    p.evaluate(([x, y]) => {
+      const a = document.querySelector('[data-testid="lienzo-area"]');
+      const q = new DOMPoint(x, y).matrixTransform(a.getScreenCTM());
+      return { x: q.x, y: q.y };
+    }, [x, y]);
+  await p.getByTestId('lienzo').scrollIntoViewIfNeeded();
+  let a = await aPantalla(-4, 36);
+  let b = await aPantalla(64, -1);
+  await p.mouse.move(a.x, a.y);
+  await p.mouse.down();
+  await p.mouse.move(b.x, b.y, { steps: 6 });
+  await p.mouse.up();
+  const c = await aPantalla(30, 15);
+  for (let i = 0; i < 3; i++) await p.mouse.move(c.x, c.y), await p.mouse.wheel(0, -260);
+  // Ajustes de PRUEBA en las capas (no son ajustes de ningún material real).
+  const capa = async (n, modo, v) => {
+    await p.getByTestId(`capa-${n}-modo`).selectOption(modo);
+    for (const [k, x] of Object.entries(v)) await p.getByTestId(`capa-${n}-${k}`).fill(x);
+  };
+  await capa(1, 'corte', { potencia: '80', velocidad: '600', pasadas: '2' });
+  await capa(2, 'corte', { potencia: '15', velocidad: '1500', pasadas: '1' });
+  await capa(3, 'grabado', { potencia: '40', velocidad: '3000', pasadas: '1', intervalo: '0.25' });
+  await foto(p, `lienzo-seleccion-zoom_${ancho}.png`);
+  await foto(p, `capas_${ancho}.png`, '.lateral');
+  await p.getByTestId('panel-material').locator('summary').click();
+  await p.getByTestId('ajuste-corte-potencia').fill('80');
+  await p.getByTestId('ajuste-corte-velocidad').fill('600');
+  await p.getByTestId('ajuste-corte-pasadas').fill('2');
+  await p.getByTestId('guardar-ajustes').click();
+  await foto(p, `materiales_${ancho}.png`, '[data-testid="panel-material"]');
   await ctx.close();
 }
 app.s.close();

@@ -14,8 +14,17 @@ import {
 } from '../diseno/edicion';
 
 const NS = 'http://www.w3.org/2000/svg';
-/** Margen alrededor del área (mm), para las reglas y para ver figuras que se salen. */
-const MARGEN = 0.08;
+/** Márgenes en px de pantalla al ajustar la vista: izquierda y abajo dejan sitio a las reglas. */
+const PAD = { izq: 46, der: 14, arriba: 14, abajo: 28 } as const;
+/** Bandas de las reglas (px de pantalla). */
+const BANDA_IZQ_PX = 40;
+const BANDA_ABAJO_PX = 20;
+const FUENTE_PX = 11;
+/** Límites de zoom: como mucho 60 px por mm; como poco, la mitad de la vista ajustada. */
+const MAX_PX_POR_MM = 60;
+const MIN_ZOOM_RELATIVO = 0.5;
+/** Pasos posibles entre etiquetas de las reglas (mm). */
+const PASOS_REGLA = [1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
 /** Tamaño de los tiradores en px de pantalla. */
 const TIRADOR_PX = 14;
 /** Desplazamiento mínimo (px) para que un toque cuente como arrastre. */
@@ -25,7 +34,19 @@ type Arrastre =
   | { tipo: 'mover'; inicio: Punto; base: Figura[]; movido: boolean; idTocado: string | null; shift: boolean }
   | { tipo: 'caja'; inicio: Punto; actual: Punto; shift: boolean; previa: Set<string> }
   | { tipo: 'escalar'; ux: number; uy: number; base: Figura[]; desfase: Punto }
-  | { tipo: 'rotar'; centro: Punto; anguloInicio: number; base: Figura[]; anguloFigura: number };
+  | { tipo: 'rotar'; centro: Punto; anguloInicio: number; base: Figura[]; anguloFigura: number }
+  | { tipo: 'pan'; ultimo: { x: number; y: number } }
+  | { tipo: 'gesto'; d0: number; m0: { x: number; y: number }; vista0: Vista }
+  /** Quedó un dedo tras un gesto de dos dedos: no hace nada hasta levantarlo. */
+  | { tipo: 'espera' };
+
+/** Rectángulo visible en coordenadas del SVG (mm; Y hacia abajo). */
+interface Vista {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 export interface EventosLienzo {
   /** Las figuras cambiaron (final = true al soltar). */
@@ -55,6 +76,12 @@ export class Lienzo {
   private arrastre: Arrastre | null = null;
   private punteroId: number | null = null;
   private inicioPx: { x: number; y: number } | null = null;
+  private vista: Vista = { x: 0, y: 0, w: 100, h: 100 };
+  private ajustada = true;
+  /** Punteros táctiles activos (para el gesto de dos dedos). */
+  private toques = new Map<number, { x: number; y: number }>();
+  /** Barra espaciadora pulsada: arrastrar mueve la vista. */
+  private espacio = false;
 
   constructor(
     contenedor: HTMLElement,
@@ -65,8 +92,14 @@ export class Lienzo {
     this.mundo = el('g');
     this.capaFiguras = el('g', { class: 'figuras' });
     this.capaSeleccion = el('g', { class: 'seleccion' });
-    this.svg.append(this.reglas, this.mundo);
+    this.svg.append(this.mundo, this.reglas);
     contenedor.append(this.svg);
+    this.svg.addEventListener('wheel', (e) => this.alRueda(e), { passive: false });
+    this.svg.addEventListener('keyup', (e) => {
+      if (e.key === ' ') this.espacio = false;
+    });
+    this.svg.addEventListener('blur', () => (this.espacio = false));
+    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => this.alRedimensionar()).observe(this.svg);
     this.svg.addEventListener('pointerdown', (e) => this.alPulsar(e));
     this.svg.addEventListener('pointermove', (e) => this.alMover(e));
     this.svg.addEventListener('pointerup', (e) => this.alSoltar(e));
@@ -74,40 +107,158 @@ export class Lienzo {
     this.svg.addEventListener('keydown', (e) => this.alTeclear(e));
   }
 
-  /** Tamaño del área en mm. Redibuja el fondo, la cuadrícula y las reglas. */
+  /** Tamaño del área en mm. Redibuja el fondo y la cuadrícula, y ajusta la vista. */
   fijarArea(ancho: number, alto: number): void {
     this.ancho = ancho;
     this.alto = alto;
-    const m = Math.max(ancho, alto) * MARGEN;
-    this.svg.setAttribute('viewBox', `${-m} ${-m} ${ancho + 2 * m} ${alto + 2 * m}`);
+    // Proporción del recuadro: la del área, sin pasar de 2:1 ni de 1:1,6.
+    this.svg.style.aspectRatio = String(Math.min(2, Math.max(1 / 1.6, (ancho + 60) / (alto + 42))));
     this.mundo.setAttribute('transform', `matrix(1 0 0 -1 0 ${alto})`);
     this.mundo.replaceChildren();
     this.mundo.append(el('rect', { class: 'area', 'data-testid': 'lienzo-area', x: 0, y: 0, width: ancho, height: alto }));
     const rejilla = el('g', { class: 'rejilla' });
+    // Rejilla fina de 1 mm (solo se ve con zoom), media de 10 mm y mayor de 50 mm.
+    if (Math.max(ancho, alto) <= 1000) {
+      const fina = el('g', { class: 'fina' });
+      for (let x = 1; x < ancho; x++) if (x % 10) fina.append(el('line', { x1: x, y1: 0, x2: x, y2: alto }));
+      for (let y = 1; y < alto; y++) if (y % 10) fina.append(el('line', { x1: 0, y1: y, x2: ancho, y2: y }));
+      rejilla.append(fina);
+    }
     const paso = Math.max(ancho, alto) > 1000 ? 50 : 10;
     for (let x = paso; x < ancho; x += paso)
       rejilla.append(el('line', { x1: x, y1: 0, x2: x, y2: alto, class: x % (paso * 5) === 0 ? 'mayor' : '' }));
     for (let y = paso; y < alto; y += paso)
       rejilla.append(el('line', { x1: 0, y1: y, x2: ancho, y2: y, class: y % (paso * 5) === 0 ? 'mayor' : '' }));
     this.mundo.append(rejilla, this.capaFiguras, this.capaSeleccion);
-    // Reglas en mm (fuera del grupo volteado, para que el texto no salga al revés).
+    this.ajustar();
+  }
+
+  // --- Vista: zoom y desplazamiento ------------------------------------------------
+
+  private tamPx(): { w: number; h: number } {
+    const r = this.svg.getBoundingClientRect();
+    return { w: r.width, h: r.height };
+  }
+
+  /** mm por px de la vista ajustada (todo el área a la vista). */
+  private kAjuste(): number {
+    const { w, h } = this.tamPx();
+    if (w < 20 || h < 20) return Math.max(this.ancho, this.alto, 1) / 300;
+    return Math.max(this.ancho / Math.max(10, w - PAD.izq - PAD.der), this.alto / Math.max(10, h - PAD.arriba - PAD.abajo));
+  }
+
+  /** Vuelve a ver el área completa. */
+  ajustar(): void {
+    const { w, h } = this.tamPx();
+    const W = w < 20 ? 300 : w;
+    const H = h < 20 ? 300 : h;
+    const k = this.kAjuste();
+    const libreX = (W - PAD.izq - PAD.der) * k - this.ancho;
+    const libreY = (H - PAD.arriba - PAD.abajo) * k - this.alto;
+    this.vista = { x: -PAD.izq * k - libreX / 2, y: -PAD.arriba * k - libreY / 2, w: W * k, h: H * k };
+    this.ajustada = true;
+    this.aplicarVista();
+  }
+
+  /** Zoom por un factor (>1 acerca) manteniendo fijo el punto de pantalla (cx, cy). */
+  zoom(factor: number, cx?: number, cy?: number): void {
+    const r = this.svg.getBoundingClientRect();
+    if (r.width < 20) return;
+    const k0 = this.vista.w / r.width;
+    const k = this.limitarK(k0 / factor);
+    const px = (cx ?? r.left + r.width / 2) - r.left;
+    const py = (cy ?? r.top + r.height / 2) - r.top;
+    const u = { x: this.vista.x + px * k0, y: this.vista.y + py * k0 };
+    this.vista = { x: u.x - px * k, y: u.y - py * k, w: r.width * k, h: r.height * k };
+    this.ajustada = false;
+    this.aplicarVista();
+  }
+
+  /** Factor de zoom actual respecto a la vista ajustada (1 = ajustada). */
+  nivelZoom(): number {
+    const { w } = this.tamPx();
+    return w < 20 ? 1 : this.kAjuste() / (this.vista.w / w);
+  }
+
+  private limitarK(k: number): number {
+    return Math.min(this.kAjuste() / MIN_ZOOM_RELATIVO, Math.max(1 / MAX_PX_POR_MM, k));
+  }
+
+  private desplazarPx(dx: number, dy: number): void {
+    const { w } = this.tamPx();
+    if (w < 20) return;
+    const k = this.vista.w / w;
+    this.vista = { ...this.vista, x: this.vista.x - dx * k, y: this.vista.y - dy * k };
+    this.ajustada = false;
+    this.aplicarVista();
+  }
+
+  private alRedimensionar(): void {
+    const { w, h } = this.tamPx();
+    if (w < 20 || h < 20) return;
+    if (this.ajustada) return this.ajustar();
+    const k = this.vista.w / Math.max(1, this.ultimoAncho || w);
+    const cx = this.vista.x + this.vista.w / 2;
+    const cy = this.vista.y + this.vista.h / 2;
+    this.vista = { x: cx - (w * k) / 2, y: cy - (h * k) / 2, w: w * k, h: h * k };
+    this.aplicarVista();
+  }
+
+  private ultimoAncho = 0;
+
+  private aplicarVista(): void {
+    const v = this.vista;
+    this.svg.setAttribute('viewBox', `${v.x} ${v.y} ${v.w} ${v.h}`);
+    this.ultimoAncho = this.tamPx().w;
+    const k = this.ultimoAncho >= 20 ? v.w / this.ultimoAncho : this.kAjuste();
+    this.svg.classList.toggle('con-detalle', 1 / k >= 6);
+    this.svg.dataset.zoom = this.nivelZoom().toFixed(3);
+    this.dibujarReglas(k);
+    this.dibujar();
+  }
+
+  /** Reglas en mm, pegadas a los bordes izquierdo e inferior de la vista. */
+  private dibujarReglas(k: number): void {
+    const v = this.vista;
     this.reglas.replaceChildren();
-    const etiqueta = paso * 5;
-    const fuente = m * 0.42;
-    for (let x = 0; x <= ancho + 1e-9; x += etiqueta) {
-      const t = el('text', { x, y: alto + m * 0.6, 'font-size': fuente, 'text-anchor': 'middle' });
+    const fuente = FUENTE_PX * k;
+    const bandaIzq = BANDA_IZQ_PX * k;
+    const bandaAbajo = BANDA_ABAJO_PX * k;
+    const yBanda = v.y + v.h - bandaAbajo;
+    this.reglas.append(
+      el('rect', { class: 'banda', x: v.x, y: yBanda, width: v.w, height: bandaAbajo }),
+      el('rect', { class: 'banda', x: v.x, y: v.y, width: bandaIzq, height: v.h }),
+    );
+    const paso = PASOS_REGLA.find((p) => p / k >= 50) ?? PASOS_REGLA[PASOS_REGLA.length - 1];
+    const base = yBanda + bandaAbajo / 2 + fuente * 0.35;
+    for (let x = Math.ceil(v.x / paso) * paso; x <= v.x + v.w; x += paso) {
+      if (x < 0 || x > this.ancho + 1e-9) continue;
+      if (x - fuente * 1.6 < v.x + bandaIzq) continue;
+      const t = el('text', { x, y: base, 'font-size': fuente, 'text-anchor': 'middle', 'data-testid': 'regla-x' });
       t.textContent = String(x);
       this.reglas.append(t);
     }
-    for (let y = 0; y <= alto + 1e-9; y += etiqueta) {
-      const t = el('text', { x: -m * 0.15, y: alto - y + fuente * 0.35, 'font-size': fuente, 'text-anchor': 'end' });
+    // En el SVG la Y va hacia abajo: y_svg = alto - y.
+    for (let y = Math.ceil((this.alto - (v.y + v.h)) / paso) * paso; this.alto - y >= v.y; y += paso) {
+      if (y < 0 || y > this.alto + 1e-9) continue;
+      const ys = this.alto - y;
+      if (ys + fuente * 0.6 > yBanda || ys - fuente * 0.6 < v.y) continue;
+      const t = el('text', { x: v.x + bandaIzq - 5 * k, y: ys + fuente * 0.35, 'font-size': fuente, 'text-anchor': 'end', 'data-testid': 'regla-y' });
       t.textContent = String(y);
       this.reglas.append(t);
     }
-    const u = el('text', { x: ancho + m * 0.1, y: alto + m * 0.6, 'font-size': fuente, 'text-anchor': 'start' });
+    // «mm» en la esquina donde se cruzan las dos reglas: no tapa ninguna etiqueta.
+    const u = el('text', { x: v.x + bandaIzq / 2, y: base, 'font-size': fuente, 'text-anchor': 'middle', 'data-testid': 'regla-mm' });
     u.textContent = 'mm';
     this.reglas.append(u);
-    this.dibujar();
+  }
+
+  private alRueda(e: WheelEvent): void {
+    e.preventDefault();
+    const unidad = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1;
+    // La rueda (y el pellizco del trackpad, que llega como rueda con Ctrl) acerca o aleja.
+    const factor = Math.exp((-e.deltaY * unidad * (e.ctrlKey ? 4 : 1)) / 600);
+    this.zoom(Math.min(4, Math.max(0.25, factor)), e.clientX, e.clientY);
   }
 
   actualizar(figuras: Figura[], capas: CapaProyecto[], sel: Set<string>): void {
@@ -233,8 +384,23 @@ export class Lienzo {
   }
 
   private alPulsar(e: PointerEvent): void {
-    if (this.punteroId !== null || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    if (e.pointerType === 'touch') {
+      this.toques.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (this.toques.size === 2) return this.empezarGesto(e);
+      if (this.toques.size > 2) return;
+    }
+    if (this.punteroId !== null) return;
+    if (e.pointerType === 'mouse' && e.button === 1) {
+      // Botón central: mover la vista.
+      this.empezarPan(e);
+      return;
+    }
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
     this.svg.focus({ preventScroll: true });
+    if (this.espacio) {
+      this.empezarPan(e);
+      return;
+    }
     const p = this.aDiseno(e);
     const objetivo = e.target as Element;
     const tirador = objetivo.closest('[data-tirador]')?.getAttribute('data-tirador');
@@ -270,9 +436,59 @@ export class Lienzo {
     e.preventDefault();
   }
 
-  private alMover(e: PointerEvent): void {
+  private empezarPan(e: PointerEvent): void {
+    this.arrastre = { tipo: 'pan', ultimo: { x: e.clientX, y: e.clientY } };
+    this.punteroId = e.pointerId;
+    this.svg.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  }
+
+  /** Segundo dedo: se anula lo que hacía el primero y empieza el zoom/desplazamiento. */
+  private empezarGesto(e: PointerEvent): void {
     const a = this.arrastre;
+    if (a && 'base' in a) {
+      this.figuras = a.base;
+      this.eventos.cambio(this.figuras, true);
+    } else if (a?.tipo === 'caja') {
+      this.sel = a.previa;
+      this.emitirSeleccion();
+    }
+    const [p, q] = [...this.toques.values()];
+    this.arrastre = { tipo: 'gesto', d0: Math.max(1, Math.hypot(q.x - p.x, q.y - p.y)), m0: { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 }, vista0: { ...this.vista } };
+    this.punteroId = null;
+    this.svg.setPointerCapture(e.pointerId);
+    e.preventDefault();
+    this.dibujar();
+  }
+
+  private moverGesto(a: { d0: number; m0: { x: number; y: number }; vista0: Vista }): void {
+    const [p, q] = [...this.toques.values()];
+    const r = this.svg.getBoundingClientRect();
+    if (r.width < 20) return;
+    const d = Math.max(1, Math.hypot(q.x - p.x, q.y - p.y));
+    const m = { x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 };
+    const k0 = a.vista0.w / r.width;
+    const k = this.limitarK((k0 * a.d0) / d);
+    const u = { x: a.vista0.x + (a.m0.x - r.left) * k0, y: a.vista0.y + (a.m0.y - r.top) * k0 };
+    this.vista = { x: u.x - (m.x - r.left) * k, y: u.y - (m.y - r.top) * k, w: r.width * k, h: r.height * k };
+    this.ajustada = false;
+    this.aplicarVista();
+  }
+
+  private alMover(e: PointerEvent): void {
+    if (e.pointerType === 'touch' && this.toques.has(e.pointerId)) this.toques.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const a = this.arrastre;
+    if (a?.tipo === 'gesto') {
+      if (this.toques.size === 2 && this.toques.has(e.pointerId)) this.moverGesto(a);
+      return;
+    }
     if (!a || e.pointerId !== this.punteroId) return;
+    if (a.tipo === 'pan') {
+      this.desplazarPx(e.clientX - a.ultimo.x, e.clientY - a.ultimo.y);
+      a.ultimo = { x: e.clientX, y: e.clientY };
+      return;
+    }
+    if (a.tipo === 'espera') return;
     const p = this.aDiseno(e);
     const lejos = this.inicioPx ? Math.hypot(e.clientX - this.inicioPx.x, e.clientY - this.inicioPx.y) >= UMBRAL_PX : true;
     switch (a.tipo) {
@@ -336,12 +552,21 @@ export class Lienzo {
   }
 
   private alSoltar(e: PointerEvent, cancelado = false): void {
+    const eraToque = this.toques.delete(e.pointerId);
+    if (this.arrastre?.tipo === 'gesto' || this.arrastre?.tipo === 'espera') {
+      if (this.svg.hasPointerCapture(e.pointerId)) this.svg.releasePointerCapture(e.pointerId);
+      if (!this.toques.size) {
+        this.arrastre = null;
+        this.punteroId = null;
+      } else if (eraToque) this.arrastre = { tipo: 'espera' };
+      return;
+    }
     if (e.pointerId !== this.punteroId) return;
     const a = this.arrastre;
     this.arrastre = null;
     this.punteroId = null;
     if (this.svg.hasPointerCapture(e.pointerId)) this.svg.releasePointerCapture(e.pointerId);
-    if (!a) return;
+    if (!a || a.tipo === 'pan') return;
     if (cancelado && a.tipo !== 'caja') {
       this.figuras = a.base;
       this.eventos.cambio(this.figuras, true);
@@ -356,6 +581,28 @@ export class Lienzo {
   }
 
   private alTeclear(e: KeyboardEvent): void {
+    if (e.key === ' ') {
+      this.espacio = true;
+      e.preventDefault();
+      return;
+    }
+    if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+      if (e.key === '+' || e.key === '=') {
+        this.zoom(1.25);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === '-') {
+        this.zoom(0.8);
+        e.preventDefault();
+        return;
+      }
+      if (e.key === '0') {
+        this.ajustar();
+        e.preventDefault();
+        return;
+      }
+    }
     if (!this.sel.size) return;
     const paso = e.shiftKey ? 10 : 1;
     const flechas: Record<string, [number, number]> = { ArrowLeft: [-paso, 0], ArrowRight: [paso, 0], ArrowUp: [0, paso], ArrowDown: [0, -paso] };

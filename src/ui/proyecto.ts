@@ -63,6 +63,10 @@ export const TEXTOS_PROYECTO = {
   angulo: 'Ángulo (°)',
   proporcion: 'Mantener proporción',
   ayudaLienzo: 'Arrastra para mover. Tiradores: escalar (con Mayús, proporcional) y girar (con Mayús, de 15° en 15°). Flechas: mover 1 mm (con Mayús, 10 mm). Supr: borrar.',
+  ayudaVista: 'Zoom: rueda del ratón, pellizco o + y −. Mover la vista: arrastra con la barra espaciadora pulsada, con el botón central o con dos dedos. 0 o «Ajustar»: ver toda el área.',
+  ajustar: 'Ajustar',
+  acercar: 'Acercar',
+  alejar: 'Alejar',
   capas: 'Capas',
   sinCapas: 'Las capas aparecen al importar un diseño: una por cada color de trazo.',
   capa: (n: number) => `Capa ${n}`,
@@ -190,9 +194,30 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
   editor.append(
     h('div', { class: 'fila barra-proyecto' }, h('p', {}, `${T.material}: `, nombreMaterial), btnImportar, archivo, btnBorrar, btnNuevo),
     estadoProyecto,
-    h('div', { class: 'mesa' }, h('div', { class: 'columna-lienzo' }, contLienzo, h('p', { class: 'nota', text: T.ayudaLienzo })), lateral),
+    h(
+      'div',
+      { class: 'mesa' },
+      h(
+        'div',
+        { class: 'columna-lienzo' },
+        contLienzo,
+        h(
+          'div',
+          { class: 'vista-lienzo', role: 'group', 'aria-label': 'Vista del lienzo' },
+          h('button', { type: 'button', class: 'btn btn-ghost', 'data-testid': 'zoom-menos', 'aria-label': T.alejar, title: T.alejar, text: '−' }),
+          h('button', { type: 'button', class: 'btn btn-ghost', 'data-testid': 'zoom-mas', 'aria-label': T.acercar, title: T.acercar, text: '+' }),
+          h('button', { type: 'button', class: 'btn btn-ghost', 'data-testid': 'ajustar-vista', text: T.ajustar }),
+        ),
+        h('p', { class: 'nota', text: T.ayudaLienzo }),
+        h('p', { class: 'nota', text: T.ayudaVista }),
+      ),
+      lateral,
+    ),
   );
 
+  editor.querySelector('[data-testid="zoom-menos"]')!.addEventListener('click', () => lienzo.zoom(0.8));
+  editor.querySelector('[data-testid="zoom-mas"]')!.addEventListener('click', () => lienzo.zoom(1.25));
+  editor.querySelector('[data-testid="ajustar-vista"]')!.addEventListener('click', () => lienzo.ajustar());
   const lienzo = new Lienzo(contLienzo, {
     cambio(figuras, final) {
       if (!proyecto) return;
