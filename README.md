@@ -90,7 +90,7 @@ de referencia, sin `--laser-mode`, con `--max-s` y `--area=` de cada perfil de p
   Los trazos abiertos se cortan como líneas en las capas de corte; en el grabado no se rellenan y
   al exportar se avisa cuántos quedaron fuera del relleno.
 - **Materiales:** se elige uno al empezar el proyecto. Sus ajustes por modo empiezan vacíos (no se
-  inventan valores): se llenan con lo que dé la cuadrícula de prueba. Se guardan en localStorage
+  inventan valores): se llenan con los valores que te funcionaron en tus pruebas. Se guardan en localStorage
   (`chopilaser.materiales.v1`) y se exportan/importan en `.json` con validación estricta
   (`formato: "chopilaser-materiales"`, `version: 1`, hasta 200 materiales y 1 MB).
 - **Exportar:** siempre con el generador seguro de la fase 0 y el perfil guardado en ese momento.

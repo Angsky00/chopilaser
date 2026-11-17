@@ -235,3 +235,30 @@ test.describe('ajustes del material: campos anchos (N1)', () => {
     });
   }
 });
+
+test.describe('textos de Marketing (1a)', () => {
+  test('se muestran con la redacción exacta', async ({ page }, info) => {
+    await preparar(page, CASOS[0].perfilPrueba);
+    await expect(page.getByTestId('proyecto')).toContainText(
+      'Elige el material para empezar. Sus ajustes llenan las capas; si todavía están vacíos, llénalos con los valores que te funcionaron en tus pruebas.',
+    );
+    await expect(page.getByTestId('material-select').locator('option').first()).toHaveText('Todavía no hay materiales. Escribe un nombre para crear el primero.');
+    await empezarCon(page, 'Pino 3 mm');
+    await expect(page.getByTestId('sin-seleccion')).toHaveText('Toca o haz clic en una figura para seleccionarla, o arrastra un recuadro para elegir varias.');
+    await expect(page.getByTestId('panel-material')).toContainText(
+      'Llena estos valores con los que mejor resultado te dieron en tus pruebas con este material. Se usan al crear capas nuevas.',
+    );
+    const vacio = info.outputPath('vacio.svg');
+    writeFileSync(vacio, '<svg xmlns="http://www.w3.org/2000/svg" width="10mm" height="10mm" viewBox="0 0 10 10"></svg>');
+    await page.getByTestId('importar-diseno').setInputFiles(vacio);
+    await expect(page.getByTestId('proyecto-estado')).toHaveText('No se encontraron figuras en «vacio.svg».');
+    await page.getByTestId('importar-diseno').setInputFiles(join(MUESTRAS, 'cuadrados.svg'));
+    let mensaje = '';
+    page.once('dialog', (d) => {
+      mensaje = d.message();
+      void d.dismiss();
+    });
+    await page.getByTestId('nuevo-proyecto').click();
+    await expect.poll(() => mensaje).toBe('Se borrará el diseño actual y no se puede recuperar. ¿Empezar un proyecto nuevo?');
+  });
+});
