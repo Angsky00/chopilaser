@@ -1,0 +1,27 @@
+{
+  "name": "chopilaser",
+  "version": "0.0.0",
+  "private": true,
+  "description": "ChopiLaser (nombre provisional): generador de G-code láser para usar por tarjeta SD",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:py": "python3 -m pytest -q tools/tests",
+    "test:e2e": "playwright test --project=chromium --project=firefox",
+    "golden": "ACTUALIZAR_GOLDEN=1 vitest run tests/unit/golden.test.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "vitest": "^5.1.0"
+  }
+}
