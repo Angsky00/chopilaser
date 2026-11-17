@@ -26,3 +26,5 @@ def test_compact(): assert 'G0_LASER_ON' in codes("M3S500\nG1X1F100\nG0X5Y5\nM5\
 def test_bed(): assert 'OUT_OF_BED' in codes("G0 X500 Y0\nM5\n", bed=(400, 400))[0]
 def test_relative_bed(): assert 'OUT_OF_BED' in codes("G91\nG0 X300\nG0 X300\nM5\n", bed=(400, 400))[0]
 def test_parse(): assert 'PARSE' in codes("G1 X1 F100 ¿?\nM5\n")[0]
+def test_area_negativa_ok(): assert codes("G0 X-100 Y-50\nM5\n", bed=(-300, -200, 0, 0))[0] == []
+def test_area_negativa_fuera(): assert 'OUT_OF_BED' in codes("G0 X10 Y-50\nM5\n", bed=(-300, -200, 0, 0))[0]

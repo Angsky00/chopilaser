@@ -65,8 +65,9 @@ def lint(text, max_s, laser_mode=False, bed=None):
             if a in axes:
                 st[a.lower()] = st[a.lower()] + axes[a] if st['rel'] else axes[a]
         if bed and moving:
-            if not (0 <= st['x'] <= bed[0] and 0 <= st['y'] <= bed[1]):
-                errs.append((n, 'OUT_OF_BED', f'X{st["x"]:g} Y{st["y"]:g} fuera de {bed[0]:g}x{bed[1]:g}'))
+            x0, y0, x1, y1 = bed if len(bed) == 4 else (0, 0, bed[0], bed[1])
+            if not (x0 <= st['x'] <= x1 and y0 <= st['y'] <= y1):
+                errs.append((n, 'OUT_OF_BED', f'X{st["x"]:g} Y{st["y"]:g} fuera de X{x0:g}..{x1:g} Y{y0:g}..{y1:g}'))
     if st['spindle'] != 'M5':
         errs.append((0, 'NO_M5_END', f'termina con {st["spindle"]}'))
     return errs, warns
@@ -76,10 +77,13 @@ def main(argv=None):
     p.add_argument('files', nargs='+')
     p.add_argument('--max-s', type=float, required=True, help='valor de $30 de la máquina')
     p.add_argument('--laser-mode', action='store_true', help='$32=1')
-    p.add_argument('--bed', help='ancho,alto en mm')
+    p.add_argument('--bed', help='ancho,alto en mm (área 0..ancho, 0..alto)')
+    p.add_argument('--area', help='xmin,ymin,xmax,ymax en mm, para orígenes de homing con coordenadas negativas')
     p.add_argument('--json', action='store_true')
     a = p.parse_args(argv)
-    bed = tuple(float(x) for x in a.bed.split(',')) if a.bed else None
+    if a.bed and a.area: p.error('usa --bed o --area, no los dos')
+    bed = tuple(float(x) for x in (a.area or a.bed).split(',')) if (a.area or a.bed) else None
+    if bed and len(bed) not in (2, 4): p.error('--bed lleva 2 números y --area 4')
     rc, out = 0, {}
     for f in a.files:
         e, w = lint(open(f, encoding='utf-8', errors='replace').read(), a.max_s, a.laser_mode, bed)
