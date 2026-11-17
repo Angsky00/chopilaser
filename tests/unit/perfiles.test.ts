@@ -70,7 +70,7 @@ describe('exportar e importar perfiles', () => {
     ['número en vez de texto', archivo({ perfiles: [{ ...A, sMax: 1000 }] }), 'el perfil 1 tiene «sMax» con un valor que no es texto.'],
     ['$30 = 0', archivo({ perfiles: [A, { ...A, sMax: '0' }] }), 'el perfil 2 no es válido (Potencia máxima ($30): Escribe un número mayor que 0.)'],
     ['coma', archivo({ perfiles: [{ ...A, camaAncho: '1,5' }] }), 'el perfil 1 no es válido (Ancho (X): Escribe un número.)'],
-    ['tope', archivo({ perfiles: [{ ...A, sMax: '200000' }] }), 'el perfil 1 no es válido (Potencia máxima ($30): Escribe un número entre 0 y 100000.)'],
+    ['tope', archivo({ perfiles: [{ ...A, sMax: '200000' }] }), 'el perfil 1 no es válido (Potencia máxima ($30): Escribe un número mayor que 0 y hasta 100000.)'],
     ['$32 raro', archivo({ perfiles: [{ ...A, laserMode32: '5' }] }), 'el perfil 1 no es válido (Modo láser ($32): debe ser 0 o 1)'],
     ['$23 raro', archivo({ perfiles: [{ ...B, homing23: '1e3' }] }), 'el perfil 1 tiene un $23 que no es válido.'],
     ['sin nombre', archivo({ perfiles: [{ ...A, nombre: ' ' }] }), 'el perfil 1 no es válido (Nombre de la máquina: Este dato hace falta.)'],
@@ -80,6 +80,26 @@ describe('exportar e importar perfiles', () => {
       expect(leerArchivoPerfiles(texto)).toEqual({ ok: false, error: `No se importó nada: ${motivo}` });
     });
   }
+
+  it('{i} cuenta desde 1: el primer perfil es «perfil 1» y el tercero «perfil 3»', () => {
+    const malo = { ...A, sMax: '' };
+    expect(leerArchivoPerfiles(archivo({ perfiles: [malo, A, A] }))).toEqual({
+      ok: false,
+      error: 'No se importó nada: el perfil 1 no es válido (Potencia máxima ($30): Este dato hace falta.)',
+    });
+    expect(leerArchivoPerfiles(archivo({ perfiles: [A, A, malo] }))).toEqual({
+      ok: false,
+      error: 'No se importó nada: el perfil 3 no es válido (Potencia máxima ($30): Este dato hace falta.)',
+    });
+    expect(leerArchivoPerfiles(archivo({ perfiles: [7, A] }))).toEqual({
+      ok: false,
+      error: 'No se importó nada: el perfil 1 no tiene el formato esperado.',
+    });
+    expect(leerArchivoPerfiles(archivo({ perfiles: [{ ...A, extra: 'x' }] }))).toEqual({
+      ok: false,
+      error: 'No se importó nada: el perfil 1 tiene un dato desconocido («extra»).',
+    });
+  });
 
   it('demasiado grande', () => {
     expect(leerArchivoPerfiles(' '.repeat(1_000_001))).toEqual({ ok: false, error: 'No se importó nada: el archivo pasa de 1 MB.' });

@@ -240,6 +240,7 @@ test.describe('primera vez', () => {
     await expect(page.getByTestId('cama-ancho')).toHaveValue('');
     await expect(page.getByTestId('cama-alto')).toHaveValue('150');
     await expect(page.getByTestId('homing-23')).toHaveAttribute('readonly', '');
+    await expect(page.getByTestId('homing-23')).toHaveAttribute('placeholder', 'Se llena al pegar $$');
     await page.getByTestId('pegar-dolar').fill('$23=3\n$30=1000\n$130=400\nok');
     await page.getByTestId('leer-dolar').click();
     await expect(page.getByTestId('dolar-estado')).toHaveText('Listo: se llenaron 3 valores. Revísalos antes de guardar.');
@@ -255,11 +256,14 @@ test.describe('primera vez', () => {
   });
 
   test('coma decimal y topes muestran su error y bloquean el guardado', async ({ page }) => {
-    await llenarPerfil(page, { ...valido, sMax: '1,000' });
+    await llenarPerfil(page, { ...valido, sMax: '0' });
+    await guardarBloqueado(page);
+    await expect(page.getByTestId('error-sMax')).toHaveText('Escribe un número mayor que 0.');
+    await page.getByTestId('s-max').fill('1,000');
     await guardarBloqueado(page);
     await expect(page.getByTestId('error-sMax')).toHaveText('Escribe un número.');
     await page.getByTestId('s-max').fill('100001');
-    await expect(page.getByTestId('error-sMax')).toHaveText('Escribe un número entre 0 y 100000.');
+    await expect(page.getByTestId('error-sMax')).toHaveText('Escribe un número mayor que 0 y hasta 100000.');
     await page.getByTestId('s-max').fill('100000');
     await page.getByTestId('cama-ancho').fill('5001');
     await expect(page.getByTestId('error-camaAncho')).toHaveText('Escribe un número entre 0 y 5000.');
@@ -583,7 +587,9 @@ test.describe('perfiles en .json', () => {
     await page.reload();
     await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
     await expect(page.getByTestId('aviso-almacen')).toBeVisible();
-    await expect(page.getByTestId('aviso-almacen')).toContainText('dañados');
+    await expect(page.getByTestId('aviso-almacen')).toHaveText(
+      'No se pudieron leer los perfiles guardados en este navegador. Importa tus perfiles desde un archivo o vuelve a configurar la máquina. Al guardar se conserva una copia de los datos dañados.',
+    );
     await llenarPerfil(page, CASOS[0].perfilPrueba);
     await page.getByTestId('guardar-perfil').click();
     await expect(page.getByTestId('app-principal')).toBeVisible();

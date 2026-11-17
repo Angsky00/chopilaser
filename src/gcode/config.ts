@@ -38,6 +38,8 @@ export const MENSAJES = {
 
 /** Textos provisionales de los topes (pendientes de Marketing). */
 export const mensajeMaximo = (max: number): string => `Escribe un número entre 0 y ${max}.`;
+/** Tope de S máximo ($30) (texto de Marketing). */
+export const mensajeMaximoS = (max: number): string => `Escribe un número mayor que 0 y hasta ${max}.`;
 export const mensajeRango = (min: number, max: number): string => `Escribe un número entre ${min} y ${max}.`;
 export const mensajeAnchoMaximo = (max: number): string => `El área no puede medir más de ${max} mm de ancho.`;
 export const mensajeFondoMaximo = (max: number): string => `El área no puede medir más de ${max} mm de fondo.`;
@@ -141,7 +143,7 @@ function vacio(v: unknown): boolean {
 export function validarPerfil(crudo: PerfilCrudo | null | undefined): ResultadoPerfil {
   const c = crudo ?? {};
   const porCampo: Partial<Record<CampoPerfil, string>> = {};
-  const positivo = (campo: CampoPerfil, max: number): number | null => {
+  const positivo = (campo: CampoPerfil, max: number, textoMaximo = mensajeMaximo): number | null => {
     const v = c[campo];
     if (vacio(v)) {
       porCampo[campo] = MENSAJES.vacio;
@@ -154,7 +156,7 @@ export function validarPerfil(crudo: PerfilCrudo | null | undefined): ResultadoP
     const n = numeroPositivo(v);
     if (n === null) porCampo[campo] = MENSAJES.numeroInvalido;
     else if (n > max) {
-      porCampo[campo] = mensajeMaximo(max);
+      porCampo[campo] = textoMaximo(max);
       return null;
     }
     return n;
@@ -176,7 +178,7 @@ export function validarPerfil(crudo: PerfilCrudo | null | undefined): ResultadoP
 
   const nombre = typeof c.nombre === 'string' ? c.nombre.trim() : '';
   if (!nombre) porCampo.nombre = MENSAJES.vacio;
-  let sMax = positivo('sMax', MAX_S);
+  let sMax = positivo('sMax', MAX_S, mensajeMaximoS);
   if (sMax !== null && Math.floor(sMax * 1000) < 1) {
     porCampo.sMax = MENSAJES.numeroInvalido;
     sMax = null;

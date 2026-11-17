@@ -71,11 +71,15 @@ describe('perfil de máquina', () => {
 
   it('topes: $30 hasta MAX_S y cada dimensión hasta MAX_DIMENSION_MM', () => {
     expect(MAX_S).toBe(100000);
+    // $30 = 0 se rechaza (no es «hasta 100000» desde 0).
+    for (const v of ['0', '0.0', '-0', '0.0001'])
+      expect(validarPerfil({ ...base, sMax: v }).ok, v).toBe(false);
+    expect(erroresConfigMaquina({ sMax: 0, laserMode32: null, area: { xMin: 0, yMin: 0, xMax: 10, yMax: 10 } })).not.toEqual([]);
     expect(MAX_DIMENSION_MM).toBe(5000);
     expect(validarPerfil({ ...base, sMax: '100000', camaAncho: '5000', camaAlto: '5000' }).ok).toBe(true);
     const r = validarPerfil({ ...base, sMax: '100000.001', camaAncho: '5000.001', camaAlto: '1e9' });
     expect(!r.ok && r.porCampo).toEqual({
-      sMax: 'Escribe un número entre 0 y 100000.',
+      sMax: 'Escribe un número mayor que 0 y hasta 100000.',
       camaAncho: 'Escribe un número entre 0 y 5000.',
       camaAlto: 'Escribe un número mayor que 0.',
     });

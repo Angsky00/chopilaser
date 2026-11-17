@@ -37,7 +37,7 @@ app.innerHTML = `
     <h1 class="marca">Chopi<span>Laser</span> <small>(nombre provisional)</small></h1>
   </header>
   <div class="contenido">
-  <p id="aviso-almacen" data-testid="aviso-almacen" class="aviso panel cut" role="alert" hidden>Los perfiles guardados en este navegador están dañados y no se pudieron leer. Importa tus perfiles desde un archivo o configura la máquina de nuevo; al guardar se conserva una copia de los datos dañados.</p>
+  <p id="aviso-almacen" data-testid="aviso-almacen" class="aviso panel cut" role="alert" hidden>No se pudieron leer los perfiles guardados en este navegador. Importa tus perfiles desde un archivo o vuelve a configurar la máquina. Al guardar se conserva una copia de los datos dañados.</p>
 
   <section id="pantalla-maquina" data-testid="pantalla-maquina" class="panel cut asistente" aria-labelledby="t-maquina" hidden>
     <h2 id="t-maquina">Configura tu máquina</h2>
@@ -89,7 +89,7 @@ app.innerHTML = `
       </div>
       <div class="campo">
         <label for="homing-23">Dirección del homing ($23)</label>
-        <input id="homing-23" data-testid="homing-23" readonly placeholder="Se lee de $$" aria-describedby="ayuda-23" />
+        <input id="homing-23" data-testid="homing-23" readonly placeholder="Se llena al pegar $$" aria-describedby="ayuda-23" />
         <small class="ayuda" id="ayuda-23">Solo informativo: se guarda tal como venga en $$ y no cambia el G-code.</small>
       </div>
       <fieldset>
