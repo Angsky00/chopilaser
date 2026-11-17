@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # VALORES DE PRUEBA para el validador, NO son los de la máquina de Angel
+  # ($30 y $32 reales siguen pendientes). MAX_S_PRUEBA sale de la matriz.
+  CAMA_PRUEBA: "400,400"
+
+jobs:
+  linux:
+    name: Linux (Chromium + Firefox), sMax de prueba ${{ matrix.max_s }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        max_s: [1000, 255]
+    env:
+      MAX_S_PRUEBA: ${{ matrix.max_s }} # VALOR DE PRUEBA, no es el $30 de Angel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: Vitest
+        run: npx vitest run
+      - name: Validador de QA (pytest)
+        run: |
+          python -m pip install pytest
+          python -m pytest -q tools/tests
+      - name: Validador sobre el golden (sin --laser-mode)
+        shell: bash
+        run: python tools/gcode_lint.py --max-s "$MAX_S_PRUEBA" --bed "$CAMA_PRUEBA" tests/golden/*_s"$MAX_S_PRUEBA".gcode
+      - name: Build
+        run: npm run build
+      - name: Navegadores de Playwright
+        run: npx playwright install --with-deps chromium firefox
+      - name: Playwright (Chromium y Firefox)
+        run: npx playwright test --project=chromium --project=firefox
+      - uses: actions/upload-artifact@v4
+        if: matrix.max_s == 1000
+        with:
+          name: chopilaser-dist
+          path: dist/
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-linux-s${{ matrix.max_s }}
+          path: playwright-report/
+
+  windows:
+    name: Windows (Edge, prueba rápida), sMax de prueba ${{ matrix.max_s }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        max_s: [1000, 255]
+    env:
+      MAX_S_PRUEBA: ${{ matrix.max_s }} # VALOR DE PRUEBA, no es el $30 de Angel
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: Validador de QA (pytest)
+        run: |
+          python -m pip install pytest
+          python -m pytest -q tools/tests
+      - name: Validador sobre el golden (sin --laser-mode)
+        shell: bash
+        run: python tools/gcode_lint.py --max-s "$MAX_S_PRUEBA" --bed "$CAMA_PRUEBA" tests/golden/*_s"$MAX_S_PRUEBA".gcode
+      - name: Playwright (Edge)
+        run: npx playwright test --project=msedge
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-windows-s${{ matrix.max_s }}
+          path: playwright-report/
+
+  pages:
+    name: Publicar en GitHub Pages
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/
+      - id: deploy
+        uses: actions/deploy-pages@v4
