@@ -22,24 +22,25 @@ export const ORIGENES: { valor: OrigenCama; texto: string }[] = [
 export const MAX_S = 100000;
 /** Tope de cada dimensión del área de trabajo (ancho y fondo), en mm. */
 export const MAX_DIMENSION_MM = 5000;
+/** Largo máximo del nombre del perfil, en caracteres. */
+export const MAX_NOMBRE = 60;
 
 /** Textos de error de los campos (textos finales de Marketing). */
 export const MENSAJES = {
   vacio: 'Este dato hace falta.',
   numeroInvalido: 'Escribe un número mayor que 0.',
   exportarSinPerfil: 'Antes de exportar, configura tu máquina.',
-  // Provisional (pendiente de Marketing).
   perfilCambiado: 'El perfil cambió en otra pestaña. Vuelve a generar la cuadrícula.',
   // Solo para el modo avanzado del área.
   noEsNumero: 'Escribe un número.',
   xInvertido: 'El máximo de X debe ser mayor que el mínimo.',
   yInvertido: 'El máximo de Y debe ser mayor que el mínimo.',
+  nombreRepetido: 'Ya hay un perfil con ese nombre.',
+  nombreLargo: `El nombre puede tener hasta ${MAX_NOMBRE} caracteres.`,
 } as const;
 
-/** Textos provisionales de los topes (pendientes de Marketing). */
-export const mensajeMaximo = (max: number): string => `Escribe un número entre 0 y ${max}.`;
-/** Tope de S máximo ($30) (texto de Marketing). */
-export const mensajeMaximoS = (max: number): string => `Escribe un número mayor que 0 y hasta ${max}.`;
+/** Tope de un campo positivo: $30, ancho y fondo (texto de Marketing, una sola redacción). */
+export const mensajeTope = (max: number): string => `Escribe un número mayor que 0 y hasta ${max}.`;
 export const mensajeRango = (min: number, max: number): string => `Escribe un número entre ${min} y ${max}.`;
 export const mensajeAnchoMaximo = (max: number): string => `El área no puede medir más de ${max} mm de ancho.`;
 export const mensajeFondoMaximo = (max: number): string => `El área no puede medir más de ${max} mm de fondo.`;
@@ -121,17 +122,17 @@ export function erroresConfigMaquina(c: ConfigMaquina | null | undefined): strin
   if (typeof c.sMax !== 'number' || !Number.isFinite(c.sMax) || c.sMax <= 0)
     e.push('S máximo ($30) es obligatorio y debe ser un número mayor que 0.');
   else if (Math.floor(c.sMax * 1000) < 1) e.push('S máximo ($30) es demasiado pequeño.');
-  else if (c.sMax > MAX_S) e.push(`S máximo ($30) no puede pasar de ${MAX_S}.`);
+  else if (c.sMax > MAX_S) e.push(mensajeTope(MAX_S));
   const a = c.area;
   if (!a || ![a.xMin, a.yMin, a.xMax, a.yMax].every((v) => typeof v === 'number' && Number.isFinite(v)))
     e.push('El área de trabajo no es válida.');
   else {
     if (a.xMax - a.xMin < 0.001) e.push('El área de trabajo debe tener un ancho mayor que 0 (xmax > xmin).');
     if (a.yMax - a.yMin < 0.001) e.push('El área de trabajo debe tener un alto mayor que 0 (ymax > ymin).');
-    if (a.xMax - a.xMin > MAX_DIMENSION_MM) e.push(`El área de trabajo no puede medir más de ${MAX_DIMENSION_MM} mm en X.`);
-    if (a.yMax - a.yMin > MAX_DIMENSION_MM) e.push(`El área de trabajo no puede medir más de ${MAX_DIMENSION_MM} mm en Y.`);
+    if (a.xMax - a.xMin > MAX_DIMENSION_MM) e.push(mensajeAnchoMaximo(MAX_DIMENSION_MM));
+    if (a.yMax - a.yMin > MAX_DIMENSION_MM) e.push(mensajeFondoMaximo(MAX_DIMENSION_MM));
     if (![a.xMin, a.yMin, a.xMax, a.yMax].every((v) => Math.abs(v) <= MAX_DIMENSION_MM))
-      e.push(`Las coordenadas del área deben estar entre -${MAX_DIMENSION_MM} y ${MAX_DIMENSION_MM} mm.`);
+      e.push(mensajeRango(-MAX_DIMENSION_MM, MAX_DIMENSION_MM));
   }
   return e;
 }
@@ -140,10 +141,16 @@ function vacio(v: unknown): boolean {
   return v === undefined || v === null || (typeof v === 'string' && v.trim() === '');
 }
 
-export function validarPerfil(crudo: PerfilCrudo | null | undefined): ResultadoPerfil {
+/** Forma de comparar nombres: sin espacios a los lados y sin distinguir mayúsculas. */
+export function normalizarNombre(n: unknown): string {
+  return typeof n === 'string' ? n.trim().toLocaleLowerCase('es') : '';
+}
+
+/** Valida un perfil. `otrosNombres`: nombres de los demás perfiles, para no repetirlos. */
+export function validarPerfil(crudo: PerfilCrudo | null | undefined, otrosNombres: readonly unknown[] = []): ResultadoPerfil {
   const c = crudo ?? {};
   const porCampo: Partial<Record<CampoPerfil, string>> = {};
-  const positivo = (campo: CampoPerfil, max: number, textoMaximo = mensajeMaximo): number | null => {
+  const positivo = (campo: CampoPerfil, max: number): number | null => {
     const v = c[campo];
     if (vacio(v)) {
       porCampo[campo] = MENSAJES.vacio;
@@ -156,7 +163,7 @@ export function validarPerfil(crudo: PerfilCrudo | null | undefined): ResultadoP
     const n = numeroPositivo(v);
     if (n === null) porCampo[campo] = MENSAJES.numeroInvalido;
     else if (n > max) {
-      porCampo[campo] = textoMaximo(max);
+      porCampo[campo] = mensajeTope(max);
       return null;
     }
     return n;
@@ -178,7 +185,9 @@ export function validarPerfil(crudo: PerfilCrudo | null | undefined): ResultadoP
 
   const nombre = typeof c.nombre === 'string' ? c.nombre.trim() : '';
   if (!nombre) porCampo.nombre = MENSAJES.vacio;
-  let sMax = positivo('sMax', MAX_S, mensajeMaximoS);
+  else if ([...nombre].length > MAX_NOMBRE) porCampo.nombre = MENSAJES.nombreLargo;
+  else if (otrosNombres.some((o) => normalizarNombre(o) === normalizarNombre(nombre))) porCampo.nombre = MENSAJES.nombreRepetido;
+  let sMax = positivo('sMax', MAX_S);
   if (sMax !== null && Math.floor(sMax * 1000) < 1) {
     porCampo.sMax = MENSAJES.numeroInvalido;
     sMax = null;

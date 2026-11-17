@@ -92,6 +92,10 @@ export function pares(v = variables()) {
   par('Borde de campo con foco (cian) sobre panel', [v.cyan], [v['bg-panel-2']], 3);
   par('Borde de campo con error sobre panel', [v['error-borde']], [v['bg-panel-2']], 3);
   par('Borde del botón naranja (naranja) sobre panel', [v.orange], [v['bg-panel-2']], 3);
+  // Lienzo (fase 1): área clara para ver trazos de cualquier color, incluido el negro.
+  par('Marco y tiradores de selección sobre el área del lienzo', [v['lienzo-seleccion']], [v['lienzo-area']], 3);
+  par('Figura fuera del área sobre el área del lienzo', [v['lienzo-fuera']], [v['lienzo-area']], 3);
+  par('Borde del lienzo sobre panel', [v['line-hot']], [v['bg-panel']], 3);
   return P.map((p) => {
     const t = mezclar(...p.texto);
     const f = mezclar(...p.fondo);

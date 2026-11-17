@@ -266,7 +266,7 @@ test.describe('primera vez', () => {
     await expect(page.getByTestId('error-sMax')).toHaveText('Escribe un número mayor que 0 y hasta 100000.');
     await page.getByTestId('s-max').fill('100000');
     await page.getByTestId('cama-ancho').fill('5001');
-    await expect(page.getByTestId('error-camaAncho')).toHaveText('Escribe un número entre 0 y 5000.');
+    await expect(page.getByTestId('error-camaAncho')).toHaveText('Escribe un número mayor que 0 y hasta 5000.');
     await guardarBloqueado(page);
     await page.getByTestId('cama-ancho').fill('5000');
     await page.getByTestId('guardar-perfil').click();
@@ -574,7 +574,7 @@ test.describe('perfiles en .json', () => {
       buffer: Buffer.from(JSON.stringify(malo)),
     });
     await expect(page.getByTestId('perfiles-estado')).toHaveText(
-      'No se importó nada: el perfil 2 no es válido (Potencia máxima ($30): Escribe un número.)',
+      'No se importó nada: el perfil 2 no es válido (Potencia máxima: Escribe un número.)',
     );
     await expect(page.getByTestId('perfiles-estado')).toBeVisible();
     expect(await page.evaluate((k) => localStorage.getItem(k), CLAVE)).toBe(antes);
@@ -624,5 +624,28 @@ test.describe('táctil', () => {
     await page.getByTestId('cama-ancho').focus();
     await page.getByTestId('guardar-perfil').tap();
     await expect(page.getByTestId('perfil-nombre')).toBeFocused();
+  });
+});
+
+test.describe('notas menores de QA', () => {
+  test('no se puede guardar un perfil con un nombre repetido ni de más de 60 caracteres', async ({ page }) => {
+    await crearPerfil(page, CASOS[0].perfilPrueba);
+    await page.getByTestId('maquina').click();
+    await page.getByTestId('nuevo-perfil').click();
+    await llenarPerfil(page, { ...CASOS[1].perfilPrueba, nombre: ` ${CASOS[0].perfilPrueba.nombre.toUpperCase()} ` });
+    await guardarBloqueado(page);
+    await expect(page.getByTestId('error-nombre')).toHaveText('Ya hay un perfil con ese nombre.');
+    await page.getByTestId('perfil-nombre').fill('n'.repeat(61));
+    await expect(page.getByTestId('error-nombre')).toHaveText('El nombre puede tener hasta 60 caracteres.');
+    await page.getByTestId('perfil-nombre').fill('n'.repeat(60));
+    await page.getByTestId('guardar-perfil').click();
+    await expect(page.getByTestId('perfil-activo')).toHaveText('n'.repeat(60));
+  });
+
+  test('ayuda del rango en el modo avanzado', async ({ page }) => {
+    await page.getByTestId('origen').selectOption('personalizada');
+    await expect(page.getByTestId('ayuda-rango')).toHaveText(
+      'Cada valor va de -5000 a 5000, y el área completa no puede medir más de 5000 mm por lado.',
+    );
   });
 });

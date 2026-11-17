@@ -97,12 +97,15 @@ export function exportarPerfiles(a: Almacen): string {
   return JSON.stringify(archivo, null, 2) + '\n';
 }
 
-const NOMBRES_CAMPOS: Record<CampoPerfil, string> = {
+/** Etiqueta visible de cada dato, para los motivos de rechazo al importar. */
+const NOMBRES_CAMPOS: Record<CampoPerfil | 'laserMode32' | 'homing23', string> = {
   nombre: 'Nombre de la máquina',
-  sMax: 'Potencia máxima ($30)',
+  sMax: 'Potencia máxima',
+  laserMode32: 'Modo láser',
+  homing23: 'Dirección del homing',
   camaAncho: 'Ancho (X)',
   camaAlto: 'Fondo (Y)',
-  origen: 'origen',
+  origen: 'Origen',
   xMin: 'xmin',
   yMin: 'ymin',
   xMax: 'xmax',
@@ -111,7 +114,7 @@ const NOMBRES_CAMPOS: Record<CampoPerfil, string> = {
 
 export type ResultadoImportar = { ok: true; archivo: ArchivoPerfiles } | { ok: false; error: string };
 
-/** Textos provisionales (pendientes de Marketing). */
+/** Textos de la interfaz. */
 export const TEXTOS_IMPORTAR = {
   error: (motivo: string) => `No se importó nada: ${motivo}`,
   noJson: 'el archivo no es JSON válido.',
@@ -132,9 +135,11 @@ export const TEXTOS_IMPORTAR = {
 const esObjeto = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 
 /** Valida estrictamente un archivo de perfiles. Si algo no vale, se rechaza entero. */
-export function leerArchivoPerfiles(texto: string): ResultadoImportar {
+export function leerArchivoPerfiles(texto: string, nombresExistentes: readonly unknown[] = []): ResultadoImportar {
   const mal = (motivo: string): ResultadoImportar => ({ ok: false, error: TEXTOS_IMPORTAR.error(motivo) });
-  if (texto.length > MAX_BYTES_ARCHIVO) return mal(TEXTOS_IMPORTAR.grande);
+  // El límite es en bytes (UTF-8), no en caracteres.
+  if (texto.length > MAX_BYTES_ARCHIVO || new TextEncoder().encode(texto).length > MAX_BYTES_ARCHIVO)
+    return mal(TEXTOS_IMPORTAR.grande);
   let o: unknown;
   try {
     o = JSON.parse(texto.replace(/^\uFEFF/, ''));
@@ -155,15 +160,16 @@ export function leerArchivoPerfiles(texto: string): ResultadoImportar {
     if (!esObjeto(p)) return mal(TEXTOS_IMPORTAR.noObjeto(i));
     for (const [k, v] of Object.entries(p)) {
       if (!(CAMPOS as readonly string[]).includes(k)) return mal(TEXTOS_IMPORTAR.desconocido(i, k));
-      if (typeof v !== 'string') return mal(TEXTOS_IMPORTAR.noTexto(i, k));
+      if (typeof v !== 'string') return mal(TEXTOS_IMPORTAR.noTexto(i, NOMBRES_CAMPOS[k as keyof typeof NOMBRES_CAMPOS] ?? k));
     }
-    const r = validarPerfil(p);
+    // Sin nombres repetidos, ni con los ya guardados ni dentro del archivo.
+    const r = validarPerfil(p, [...nombresExistentes, ...perfiles.map((q) => q.nombre)]);
     if (!r.ok) {
       const [campo, msg] = Object.entries(r.porCampo)[0] ?? ['perfil', r.errores[0] ?? ''];
-      return mal(TEXTOS_IMPORTAR.invalido(i, NOMBRES_CAMPOS[campo as CampoPerfil] ?? campo, msg ?? ''));
+      return mal(TEXTOS_IMPORTAR.invalido(i, NOMBRES_CAMPOS[campo as keyof typeof NOMBRES_CAMPOS] ?? campo, msg ?? ''));
     }
     if (p.laserMode32 !== undefined && !['', '0', '1'].includes(p.laserMode32 as string))
-      return mal(TEXTOS_IMPORTAR.invalido(i, 'Modo láser ($32)', 'debe ser 0 o 1'));
+      return mal(TEXTOS_IMPORTAR.invalido(i, NOMBRES_CAMPOS.laserMode32, 'Escribe 0 o 1.'));
     const h = p.homing23;
     if (typeof h === 'string' && h.trim() !== '' && mascara23(h) === null) return mal(TEXTOS_IMPORTAR.homing(i));
     perfiles.push(limpiar(p));

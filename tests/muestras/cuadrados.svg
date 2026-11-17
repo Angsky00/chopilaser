@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Muestra para las pruebas del lienzo: dos cuadrados de 20 mm. Con el alto de 100 mm, el
+     cuadrado rojo queda en X 10..30, Y 70..90 del diseño y el azul en X 50..70, Y 70..90. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="100mm" height="100mm" viewBox="0 0 100 100">
+  <rect x="10" y="10" width="20" height="20" fill="none" stroke="#ff0000"/>
+  <rect x="50" y="10" width="20" height="20" fill="none" stroke="#0000ff"/>
+</svg>
