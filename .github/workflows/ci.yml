@@ -57,9 +57,9 @@ jobs:
         run: |
           python -m pip install pytest
           python -m pytest -q tools/tests
-      - name: Validador sobre el golden (sin --laser-mode)
+      - name: Validador sobre los goldens (cuadrícula y proyectos, sin --laser-mode)
         shell: bash
-        run: python tools/gcode_lint.py --max-s "$MAX_S_PRUEBA" --area="$AREA_PRUEBA" tests/golden/cuadricula_"$PERFIL_PRUEBA"_*.gcode
+        run: python tools/gcode_lint.py --max-s "$MAX_S_PRUEBA" --area="$AREA_PRUEBA" tests/golden/*_"$PERFIL_PRUEBA"_*.gcode
       - name: Build
         run: npm run build
       - name: Navegadores de Playwright
@@ -112,9 +112,9 @@ jobs:
         run: |
           python -m pip install pytest
           python -m pytest -q tools/tests
-      - name: Validador sobre el golden (sin --laser-mode)
+      - name: Validador sobre los goldens (cuadrícula y proyectos, sin --laser-mode)
         shell: bash
-        run: python tools/gcode_lint.py --max-s "$MAX_S_PRUEBA" --area="$AREA_PRUEBA" tests/golden/cuadricula_"$PERFIL_PRUEBA"_*.gcode
+        run: python tools/gcode_lint.py --max-s "$MAX_S_PRUEBA" --area="$AREA_PRUEBA" tests/golden/*_"$PERFIL_PRUEBA"_*.gcode
       - name: Playwright (Edge)
         run: npx playwright test --project=msedge
       - uses: actions/upload-artifact@v4

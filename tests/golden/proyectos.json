@@ -1,0 +1,26 @@
+{
+  "_nota": "Proyectos de muestra para los goldens de la fase 1. Potencias y velocidades de PRUEBA: no son ajustes de ningún material real (los materiales empiezan vacíos y se llenan con la cuadrícula de calibración).",
+  "proyectos": [
+    {
+      "nombre": "llavero",
+      "archivo": "llavero.svg",
+      "mover": [20, 25],
+      "giros": { "4": 30 },
+      "capas": {
+        "#ff0000": { "modo": "corte", "potencia": "80", "velocidad": "600", "pasadas": "2" },
+        "#0000ff": { "modo": "corte", "potencia": "15", "velocidad": "1500", "pasadas": "1" },
+        "#000000": { "modo": "grabado", "potencia": "40", "velocidad": "3000", "pasadas": "1", "intervalo": "0.25" }
+      }
+    },
+    {
+      "nombre": "placa",
+      "archivo": "placa.dxf",
+      "mover": [30, 40],
+      "giros": {},
+      "capas": {
+        "#ff0000": { "modo": "corte", "potencia": "100", "velocidad": "400", "pasadas": "1" },
+        "#0000ff": { "modo": "corte", "potencia": "10", "velocidad": "2000", "pasadas": "1", "salida": false }
+      }
+    }
+  ]
+}
