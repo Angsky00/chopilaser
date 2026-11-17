@@ -591,3 +591,32 @@ test.describe('perfiles en .json', () => {
     expect(await page.evaluate((k) => localStorage.getItem(k + '.danado'), CLAVE)).toBe('{no es json');
   });
 });
+
+test.describe('táctil', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true });
+
+  test('un toque en «Guardar y empezar» con un campo enfocado registra el intento', async ({ page }, info) => {
+    test.skip(info.project.name !== 'chromium', 'Solo en el proyecto chromium.');
+    await sinErroresVisibles(page);
+    // Se enfoca un campo vacío que no es el primero; al salir de él aparecería su error
+    // y desplazaría el botón si el toque llegara después del blur.
+    await page.getByTestId('cama-alto').focus();
+    await expect(page.getByTestId('cama-alto')).toBeFocused();
+    const antes = await page.getByTestId('guardar-perfil').boundingBox();
+    await page.getByTestId('guardar-perfil').tap();
+    await expect(page.getByTestId('errores')).toHaveText(AVISO_GUARDAR);
+    for (const campo of ['nombre', 'sMax', 'camaAncho', 'camaAlto', 'origen'])
+      await expect(page.getByTestId(`error-${campo}`)).toHaveText('Este dato hace falta.');
+    await expect(page.getByTestId('perfil-nombre')).toBeFocused();
+    await expect(page.getByTestId('perfil-nombre')).toHaveAttribute('aria-invalid', 'true');
+    // Con todos los errores visibles el botón sí se movió: el toque no se perdió por eso.
+    const despues = await page.getByTestId('guardar-perfil').boundingBox();
+    expect(antes && despues && despues.y !== antes.y).toBe(true);
+    expect(await page.evaluate((k) => localStorage.getItem(k), CLAVE)).toBe(null);
+
+    // Un segundo toque, ya con errores, también se registra y vuelve a llevar el foco al primero.
+    await page.getByTestId('cama-ancho').focus();
+    await page.getByTestId('guardar-perfil').tap();
+    await expect(page.getByTestId('perfil-nombre')).toBeFocused();
+  });
+});
