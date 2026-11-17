@@ -1,0 +1,49 @@
+{
+ "semilla_ruido": 1234,
+ "tam": [
+  400,
+  400
+ ],
+ "logo_bn": {
+  "pixeles_negros": 51897,
+  "contornos_exteriores": 3,
+  "huecos": 2,
+  "formas": {
+   "circulo": {
+    "centro": [
+     110,
+     110
+    ],
+    "r": 70
+   },
+   "cuadrado": [
+    220,
+    40,
+    360,
+    180
+   ],
+   "hueco_cuadrado": [
+    260,
+    80,
+    320,
+    140
+   ],
+   "barra": [
+    60,
+    240,
+    340,
+    340
+   ],
+   "hueco_barra": [
+    100,
+    270,
+    300,
+    310
+   ]
+  }
+ },
+ "logo_ruido": "logo_bn + 1% de píxeles negros y 1% blancos al azar; con quitar manchas debe dar los mismos 3 contornos y 2 huecos",
+ "logo_jpg_q30": "logo_bn como JPG con calidad 30; mismos contornos dentro de la tolerancia",
+ "logo_transparente": "lo negro del logo como alfa=255 y el fondo transparente; mismo resultado que logo_bn",
+ "foto_degradado": "degradado horizontal de 0 a 255 con un círculo oscuro (r=80, centro 200,200) y un cuadrado claro; el resultado depende del umbral, se usa para ver que la salida sea determinista y que cambie de forma monótona con el umbral"
+}

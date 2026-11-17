@@ -51,6 +51,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: npm ci
+      - name: Imágenes de referencia de QA sin cambios (sha256sum -c)
+        working-directory: tests/vector_ref
+        run: sha256sum -c SHA256SUMS
       - name: Vitest
         run: npx vitest run
       - name: Validador de QA (pytest)
@@ -76,6 +79,28 @@ jobs:
         with:
           name: playwright-report-linux-${{ matrix.perfil }}
           path: playwright-report/
+
+  potrace:
+    name: potrace.wasm reproducible (dos compilaciones = archivo del repo)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .cache/emsdk
+          key: emsdk-4.0.23-${{ runner.os }}
+      - name: Compilar dos veces con emsdk y potrace fijados
+        shell: bash
+        run: |
+          tools/potrace/construir.sh "$RUNNER_TEMP/potrace-1.wasm"
+          rm -f .cache/potrace-1.16.tar.gz
+          tools/potrace/construir.sh "$RUNNER_TEMP/potrace-2.wasm"
+      - name: Mismo SHA-256 en las dos compilaciones y en src/vectorizar/potrace.wasm
+        shell: bash
+        run: |
+          sha256sum "$RUNNER_TEMP/potrace-1.wasm" "$RUNNER_TEMP/potrace-2.wasm" src/vectorizar/potrace.wasm
+          test "$(sha256sum < "$RUNNER_TEMP/potrace-1.wasm")" = "$(sha256sum < "$RUNNER_TEMP/potrace-2.wasm")"
+          test "$(sha256sum < "$RUNNER_TEMP/potrace-1.wasm")" = "$(sha256sum < src/vectorizar/potrace.wasm)"
 
   windows:
     name: Windows (Edge, prueba rápida), perfil de prueba ${{ matrix.perfil }} (sMax ${{ matrix.max_s }})

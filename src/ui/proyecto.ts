@@ -32,6 +32,7 @@ import {
   type Material,
 } from '../materiales';
 import { Lienzo } from './lienzo';
+import { esImagen, montarVectorizar } from './vectorizar';
 
 /** Textos de la interfaz del proyecto. */
 export const TEXTOS_PROYECTO = {
@@ -45,14 +46,14 @@ export const TEXTOS_PROYECTO = {
   materialCreado: (n: string) => `Material «${n}» creado.`,
   empezar: 'Empezar proyecto',
   faltaMaterial: 'Elige o crea un material para empezar.',
-  importar: 'Importar SVG o DXF',
+  importar: 'Importar SVG, DXF o imagen',
   borrar: 'Borrar',
   nuevoProyecto: 'Nuevo proyecto',
   confirmarNuevo: 'Se borrará el diseño actual y no se puede recuperar. ¿Empezar un proyecto nuevo?',
   importado: (n: number, archivo: string) => (n === 1 ? `Se importó 1 figura de «${archivo}».` : `Se importaron ${n} figuras de «${archivo}».`),
   sinFiguras: (archivo: string) => `No se encontraron figuras en «${archivo}».`,
   omitidos: (lista: string) => `No se importaron: ${lista}.`,
-  formatoNoSoportado: 'Solo se pueden importar archivos .svg o .dxf.',
+  formatoNoSoportado: 'Solo se pueden importar archivos .svg, .dxf, .png o .jpg (.jpeg).',
   errorLeer: (archivo: string, motivo: string) => `No se pudo importar «${archivo}»: ${motivo}`,
   propiedades: 'Posición y tamaño (mm)',
   sinSeleccion: 'Toca o haz clic en una figura para seleccionarla, o arrastra un recuadro para elegir varias.',
@@ -187,16 +188,18 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
 
   // --- Editor -----------------------------------------------------------------
   const nombreMaterial = h('strong', { 'data-testid': 'proyecto-material' });
-  const archivo = h('input', { type: 'file', accept: '.svg,.dxf,image/svg+xml', 'data-testid': 'importar-diseno', hidden: '' });
+  const archivo = h('input', { type: 'file', accept: '.svg,.dxf,.png,.jpg,.jpeg,image/svg+xml,image/png,image/jpeg', 'data-testid': 'importar-diseno', hidden: '' });
   const btnImportar = h('button', { type: 'button', class: 'btn btn-cyan', 'data-testid': 'importar-diseno-btn', text: T.importar });
   const btnBorrar = h('button', { type: 'button', class: 'btn btn-ghost', 'data-testid': 'borrar', text: T.borrar });
   const btnNuevo = h('button', { type: 'button', class: 'btn btn-ghost', 'data-testid': 'nuevo-proyecto', text: T.nuevoProyecto });
   const estadoProyecto = h('p', { 'data-testid': 'proyecto-estado', role: 'status' });
   const contLienzo = h('div', { class: 'lienzo-contenedor', 'data-testid': 'lienzo-contenedor' });
+  const contTrazado = h('div', {});
   const lateral = h('div', { class: 'lateral' });
   editor.append(
     h('div', { class: 'fila barra-proyecto' }, h('p', {}, `${T.material}: `, nombreMaterial), btnImportar, archivo, btnBorrar, btnNuevo),
     estadoProyecto,
+    contTrazado,
     h(
       'div',
       { class: 'mesa' },
@@ -515,11 +518,23 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
     if (f) await importarArchivo(f);
   });
 
+  const vectorizar = montarVectorizar(contTrazado, (r, nombre) => agregarImportacion(r, nombre));
+
   async function importarArchivo(f: File): Promise<void> {
     if (!proyecto) return;
     const nombre = f.name;
     const ext = nombre.toLowerCase().split('.').pop();
     let r: ResultadoImportacion;
+    if (esImagen(nombre)) {
+      estadoProyecto.textContent = '';
+      estadoProyecto.className = '';
+      const error = await vectorizar.abrir(f);
+      if (error) {
+        estadoProyecto.textContent = T.errorLeer(nombre, error);
+        estadoProyecto.className = 'errores';
+      }
+      return;
+    }
     try {
       if (f.size > 20_000_000) throw new Error('el archivo pasa de 20 MB.');
       const texto = await f.text();
@@ -535,6 +550,11 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
       estadoProyecto.className = 'errores';
       return;
     }
+    agregarImportacion(r, nombre);
+  }
+
+  function agregarImportacion(r: ResultadoImportacion, nombre: string): void {
+    if (!proyecto) return;
     const nuevas: Figura[] = figurasDesdeImportacion(r, areaActual());
     if (!nuevas.length) {
       estadoProyecto.textContent = T.sinFiguras(nombre);
@@ -559,6 +579,7 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
 
   btnNuevo.addEventListener('click', () => {
     if (proyecto && proyecto.figuras.length && !window.confirm(T.confirmarNuevo)) return;
+    vectorizar.cerrar();
     proyecto = null;
     sel = new Set();
     mostrar();
