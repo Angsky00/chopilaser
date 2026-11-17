@@ -19,12 +19,17 @@ la SD. En los dos casos el archivo es idéntico, byte por byte.
 
 ## Fase 0 (estado actual)
 
-- **Configuración de la máquina**, guardada en el navegador (localStorage):
-  - «S máximo ($30)», obligatorio.
-  - Ancho y alto de la cama en mm, obligatorios.
-  - Modo láser ($32), solo como dato.
-  - No hay valores por defecto: si algún campo obligatorio está vacío, es 0, negativo o no es un
-    número, no se puede generar ni exportar.
+- **Configuración inicial:** la primera vez que se abre la app, antes que nada, aparece la pantalla
+  de configuración de la máquina. Pide:
+  - el nombre del perfil;
+  - «S máximo ($30)» y el modo láser ($32, solo como dato);
+  - el área de trabajo: ancho, alto y esquina del origen (0,0), o xmin, ymin, xmax, ymax.
+
+  Tiene un botón con los valores de fábrica de GRBL 1.1 y una caja «Pegar salida de $$» que lee
+  $30, $32, $130 y $131. Al guardar se crea el primer perfil y se abre la app. Después, los perfiles
+  se editan o se crean desde el botón «Máquina». Se guardan en el navegador (localStorage).
+- **Sin valores por defecto:** si el nombre, $30 o el área están vacíos, en 0, son negativos donde
+  no se permite o no son números, no se puede guardar el perfil, generar ni exportar.
 - **Cuadrícula de prueba** de potencia × velocidad, en M3 y en M4, con celdas al 0 % y al 100 %,
   para calibrar materiales.
 - **Exportar `.gcode`.**
@@ -38,11 +43,14 @@ El generador (`src/gcode/`) es un módulo puro, sin interfaz, y garantiza:
 - `F` antes del primer `G1`.
 - `S` calculado desde el % y limitado a `$30`: 100 % es exactamente `$30` y 0 % es `S0`.
 - Siempre termina con `M5` y `S0`.
-- Coordenadas con 3 decimales fijos, sin `NaN`, sin negativos y dentro de la cama.
+- El diseño se traslada a la esquina (xmin, ymin) del área de trabajo, que puede ser negativa
+  según el origen del homing. Las coordenadas tienen 3 decimales fijos, sin `NaN` y siempre dentro
+  del área.
+- S conserva 3 decimales, así que también sirve una escala de 0 a 1 (por ejemplo 50 % = `S0.5`).
 - Archivo solo ASCII, sin BOM y con fin de línea LF.
 
 Además, el validador independiente de QA `tools/gcode_lint.py` revisa en el CI todos los archivos
-de referencia, sin `--laser-mode`.
+de referencia, sin `--laser-mode`, con `--max-s` y `--area=` de cada perfil de prueba.
 
 ## Desarrollo
 
@@ -63,18 +71,24 @@ npx playwright install chromium firefox
 npx playwright test --project=chromium --project=firefox   # interfaz y exportación
 ```
 
-- `tests/golden/` guarda los archivos de referencia de la cuadrícula. `tests/golden/configs.json`
-  tiene las configuraciones con que se generan (sMax 1000 y 255, cama 400 x 400 mm). **Son valores
-  de prueba, no los de la máquina real.** Para regenerarlos: `npm run golden` (revisa el diff).
-- Playwright exporta la cuadrícula en cada navegador y comprueba que el SHA-256 del archivo es igual
+- `tests/golden/` guarda los archivos de referencia de la cuadrícula para tres perfiles. Sus valores
+  están en `tests/golden/configs.json`. **Son perfiles de prueba, no los de la máquina real:**
+  - a: sMax 1000, origen abajo a la izquierda, área 0,0 a 400,400;
+  - b: sMax 255, origen arriba a la derecha, área -300,-200 a 0,0;
+  - c: S de 0 a 1 (tipo Smoothie), área personalizada 10,20 a 310,220.
+
+  Para regenerarlos: `npm run golden` (revisa el diff).
+- Playwright prueba la pantalla de configuración inicial y los perfiles, y exporta la cuadrícula en cada navegador y comprueba que el SHA-256 del archivo es igual
   al del golden y que pasa el validador. En Chromium también prueba la ruta de descarga quitando
   `showSaveFilePicker`.
 - El proyecto `msedge` de Playwright solo corre en Windows (CI en `windows-latest`).
 
-Validador a mano:
+Validador a mano (escribe `--area=` con `=` por los valores negativos):
 
 ```bash
-python3 tools/gcode_lint.py --max-s 1000 --bed 400,400 tests/golden/cuadricula_s1000.gcode
+python3 tools/gcode_lint.py --max-s 1000 --area=0,0,400,400 tests/golden/cuadricula_a_s1000.gcode
+python3 tools/gcode_lint.py --max-s 255 --area=-300,-200,0,0 tests/golden/cuadricula_b_s255.gcode
+python3 tools/gcode_lint.py --max-s 1 --area=10,20,310,220 tests/golden/cuadricula_c_s1.gcode
 ```
 
 `tools/gcode_lint.py` y `tools/tests/test_lint.py` son copia exacta de la versión de QA. Cualquier
