@@ -80,7 +80,7 @@ describe('perfil de máquina', () => {
     const r = validarPerfil({ ...base, sMax: '100000.001', camaAncho: '5000.001', camaAlto: '1e9' });
     expect(!r.ok && r.porCampo).toEqual({
       sMax: 'Escribe un número mayor que 0 y hasta 100000.',
-      camaAncho: 'Escribe un número entre 0 y 5000.',
+      camaAncho: 'Escribe un número mayor que 0 y hasta 5000.',
       camaAlto: 'Escribe un número mayor que 0.',
     });
     expect(validarPerfil({ ...base, camaAlto: '99999' }).ok).toBe(false);
@@ -117,6 +117,28 @@ describe('perfil de máquina', () => {
     const r2 = validarPerfil({ ...base, origen: '' });
     expect(!r2.ok && r2.porCampo.origen).toBe('Este dato hace falta.');
     expect(MENSAJES.exportarSinPerfil).toBe('Antes de exportar, configura tu máquina.');
+  });
+
+  it('nombre: hasta 60 caracteres y sin repetir', () => {
+    expect(validarPerfil({ ...base, nombre: 'n'.repeat(60) }).ok).toBe(true);
+    const r = validarPerfil({ ...base, nombre: 'n'.repeat(61) });
+    expect(!r.ok && r.porCampo.nombre).toBe('El nombre puede tener hasta 60 caracteres.');
+    const r2 = validarPerfil({ ...base, nombre: '  PRUEBA ' }, ['Otro', 'prueba']);
+    expect(!r2.ok && r2.porCampo.nombre).toBe('Ya hay un perfil con ese nombre.');
+    expect(validarPerfil(base, ['Otro']).ok).toBe(true);
+  });
+
+  it('la configuración usa la misma redacción de topes que los campos', () => {
+    const area = (xMax: number, yMax: number) => ({ xMin: 0, yMin: 0, xMax, yMax });
+    expect(erroresConfigMaquina({ sMax: 1000, laserMode32: null, area: area(5001, 10) })).toEqual([
+      'El área no puede medir más de 5000 mm de ancho.',
+      'Escribe un número entre -5000 y 5000.',
+    ]);
+    expect(erroresConfigMaquina({ sMax: 1000, laserMode32: null, area: area(10, 5001) })).toEqual([
+      'El área no puede medir más de 5000 mm de fondo.',
+      'Escribe un número entre -5000 y 5000.',
+    ]);
+    expect(erroresConfigMaquina({ sMax: 100001, laserMode32: null, area: area(10, 10) })).toEqual(['Escribe un número mayor que 0 y hasta 100000.']);
   });
 
   it('el nombre es obligatorio', () => {

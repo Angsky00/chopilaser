@@ -67,11 +67,11 @@ describe('exportar e importar perfiles', () => {
     ['activo texto', archivo({ activo: '0', perfiles: [A] }), 'el perfil activo del archivo no existe.'],
     ['perfil no objeto', archivo({ perfiles: [A, 'B'] }), 'el perfil 2 no tiene el formato esperado.'],
     ['dato desconocido', archivo({ perfiles: [{ ...A, potencia: '10' }] }), 'el perfil 1 tiene un dato desconocido («potencia»).'],
-    ['número en vez de texto', archivo({ perfiles: [{ ...A, sMax: 1000 }] }), 'el perfil 1 tiene «sMax» con un valor que no es texto.'],
-    ['$30 = 0', archivo({ perfiles: [A, { ...A, sMax: '0' }] }), 'el perfil 2 no es válido (Potencia máxima ($30): Escribe un número mayor que 0.)'],
+    ['número en vez de texto', archivo({ perfiles: [{ ...A, sMax: 1000 }] }), 'el perfil 1 tiene «Potencia máxima» con un valor que no es texto.'],
+    ['$30 = 0', archivo({ perfiles: [A, { ...A, nombre: 'A2', sMax: '0' }] }), 'el perfil 2 no es válido (Potencia máxima: Escribe un número mayor que 0.)'],
     ['coma', archivo({ perfiles: [{ ...A, camaAncho: '1,5' }] }), 'el perfil 1 no es válido (Ancho (X): Escribe un número.)'],
-    ['tope', archivo({ perfiles: [{ ...A, sMax: '200000' }] }), 'el perfil 1 no es válido (Potencia máxima ($30): Escribe un número mayor que 0 y hasta 100000.)'],
-    ['$32 raro', archivo({ perfiles: [{ ...A, laserMode32: '5' }] }), 'el perfil 1 no es válido (Modo láser ($32): debe ser 0 o 1)'],
+    ['tope', archivo({ perfiles: [{ ...A, sMax: '200000' }] }), 'el perfil 1 no es válido (Potencia máxima: Escribe un número mayor que 0 y hasta 100000.)'],
+    ['$32 raro', archivo({ perfiles: [{ ...A, laserMode32: '5' }] }), 'el perfil 1 no es válido (Modo láser: debe ser 0 o 1)'],
     ['$23 raro', archivo({ perfiles: [{ ...B, homing23: '1e3' }] }), 'el perfil 1 tiene un $23 que no es válido.'],
     ['sin nombre', archivo({ perfiles: [{ ...A, nombre: ' ' }] }), 'el perfil 1 no es válido (Nombre de la máquina: Este dato hace falta.)'],
   ];
@@ -82,14 +82,14 @@ describe('exportar e importar perfiles', () => {
   }
 
   it('{i} cuenta desde 1: el primer perfil es «perfil 1» y el tercero «perfil 3»', () => {
-    const malo = { ...A, sMax: '' };
-    expect(leerArchivoPerfiles(archivo({ perfiles: [malo, A, A] }))).toEqual({
+    const malo = { ...A, nombre: 'Malo', sMax: '' };
+    expect(leerArchivoPerfiles(archivo({ perfiles: [malo, A, B] }))).toEqual({
       ok: false,
-      error: 'No se importó nada: el perfil 1 no es válido (Potencia máxima ($30): Este dato hace falta.)',
+      error: 'No se importó nada: el perfil 1 no es válido (Potencia máxima: Este dato hace falta.)',
     });
-    expect(leerArchivoPerfiles(archivo({ perfiles: [A, A, malo] }))).toEqual({
+    expect(leerArchivoPerfiles(archivo({ perfiles: [A, B, malo] }))).toEqual({
       ok: false,
-      error: 'No se importó nada: el perfil 3 no es válido (Potencia máxima ($30): Este dato hace falta.)',
+      error: 'No se importó nada: el perfil 3 no es válido (Potencia máxima: Este dato hace falta.)',
     });
     expect(leerArchivoPerfiles(archivo({ perfiles: [7, A] }))).toEqual({
       ok: false,
@@ -99,6 +99,33 @@ describe('exportar e importar perfiles', () => {
       ok: false,
       error: 'No se importó nada: el perfil 1 tiene un dato desconocido («extra»).',
     });
+  });
+
+  it('límite de 1 MB en bytes, no en caracteres', () => {
+    // 600 000 «ñ» son 600 000 caracteres pero 1 200 000 bytes en UTF-8.
+    const texto = archivo({ perfiles: [{ ...A, nombre: 'ñ'.repeat(600_000) }] });
+    expect(texto.length).toBeLessThan(1_000_000);
+    expect(leerArchivoPerfiles(texto)).toEqual({ ok: false, error: 'No se importó nada: el archivo pasa de 1 MB.' });
+  });
+
+  it('nombre de hasta 60 caracteres', () => {
+    expect(leerArchivoPerfiles(archivo({ perfiles: [{ ...A, nombre: 'n'.repeat(60) }] })).ok).toBe(true);
+    expect(leerArchivoPerfiles(archivo({ perfiles: [{ ...A, nombre: 'n'.repeat(61) }] }))).toEqual({
+      ok: false,
+      error: 'No se importó nada: el perfil 1 no es válido (Nombre de la máquina: El nombre puede tener hasta 60 caracteres.)',
+    });
+  });
+
+  it('nombres repetidos: dentro del archivo o con los guardados (sin distinguir mayúsculas ni espacios)', () => {
+    expect(leerArchivoPerfiles(archivo({ perfiles: [A, { ...B, nombre: ' a ' }] }))).toEqual({
+      ok: false,
+      error: 'No se importó nada: el perfil 2 no es válido (Nombre de la máquina: Ya hay un perfil con ese nombre.)',
+    });
+    expect(leerArchivoPerfiles(archivo({ perfiles: [B] }), ['A', 'b'])).toEqual({
+      ok: false,
+      error: 'No se importó nada: el perfil 1 no es válido (Nombre de la máquina: Ya hay un perfil con ese nombre.)',
+    });
+    expect(leerArchivoPerfiles(archivo({ perfiles: [B] }), ['A']).ok).toBe(true);
   });
 
   it('demasiado grande', () => {

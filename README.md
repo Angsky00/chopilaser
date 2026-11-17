@@ -36,6 +36,8 @@ la SD. En los dos casos el archivo es idéntico, byte por byte.
   adivinar si la coma es de miles o decimal.
 - **Topes** (constantes en `src/gcode/config.ts`):
   - `MAX_S = 100000`: S máximo ($30) no puede pasar de 100000.
+  - `MAX_NOMBRE = 60`: el nombre del perfil puede tener hasta 60 caracteres, y no se puede repetir
+    (sin distinguir mayúsculas ni espacios a los lados).
   - `MAX_DIMENSION_MM = 5000`: el ancho y el fondo del área no pueden pasar de 5000 mm, y en el modo
     avanzado cada coordenada debe estar entre -5000 y 5000 mm.
 - **Perfiles en `.json`:** en «Máquina», «Exportar perfiles» descarga `chopilaser-perfiles.json`

@@ -27,6 +27,7 @@ import {
   leerArchivoPerfiles,
   perfilActivo,
   TEXTOS_IMPORTAR,
+  MAX_BYTES_ARCHIVO,
   type Almacen,
 } from './perfiles';
 
@@ -109,12 +110,13 @@ app.innerHTML = `
         </div>
         <div id="campos-area" class="rejilla" hidden>
           <small class="ayuda ancho-completo" id="ayuda-avanzado" data-testid="ayuda-avanzado">Para máquinas que quedan en coordenadas negativas después del homing.</small>
+          <small class="ayuda ancho-completo" id="ayuda-rango" data-testid="ayuda-rango">Cada valor va de -5000 a 5000, y el área completa no puede medir más de 5000 mm por lado.</small>
           ${(['xMin', 'yMin', 'xMax', 'yMax'] as const)
             .map((c) => {
               const id = c.replace(/([A-Z])/, '-$1').toLowerCase();
               return `<div class="campo">
             <label for="${id}">${c.toLowerCase()}</label>
-            <input id="${id}" data-testid="${id}" inputmode="decimal" autocomplete="off" aria-describedby="error-${c}" />
+            <input id="${id}" data-testid="${id}" inputmode="decimal" autocomplete="off" aria-describedby="ayuda-rango error-${c}" />
             <small class="error-campo" id="error-${c}" data-testid="error-${c}"></small>
           </div>`;
             })
@@ -215,6 +217,11 @@ function reiniciarErrores(): void {
 
 const fmtArea = (v: number) => milesimasCortas(aMilesimas(v));
 
+/** Nombres de los demás perfiles guardados (no el que se edita). */
+function otrosNombres(): unknown[] {
+  return almacen.perfiles.filter((_, i) => i !== editando).map((p) => p.nombre);
+}
+
 function leerFormulario(): PerfilCrudo {
   const r: Record<string, string> = {};
   for (const k of Object.keys(campos) as Campo[]) r[k] = campos[k].value;
@@ -234,7 +241,7 @@ function validarFormulario(): ReturnType<typeof validarPerfil> {
   const personalizada = campos.origen.value === 'personalizada';
   camposCama.hidden = personalizada;
   camposArea.hidden = !personalizada;
-  const r = validarPerfil(leerFormulario());
+  const r = validarPerfil(leerFormulario(), otrosNombres());
   const porCampo = r.ok ? {} : r.porCampo;
   for (const k of Object.keys(campos) as Campo[]) {
     const visible = intentoGuardar || tocados.has(k);
@@ -362,7 +369,7 @@ btnGuardar.addEventListener('mousedown', (e) => e.preventDefault());
 
 btnGuardar.addEventListener('click', () => {
   const crudo = leerFormulario();
-  if (!validarPerfil(crudo).ok) {
+  if (!validarPerfil(crudo, otrosNombres()).ok) {
     // El guardado sigue bloqueado: se muestran todos los errores y el foco va al primero.
     intentoGuardar = true;
     const r = validarFormulario();
@@ -391,7 +398,13 @@ archivoImportar.addEventListener('change', async () => {
   const archivo = archivoImportar.files?.[0];
   archivoImportar.value = '';
   if (!archivo) return;
-  const r = leerArchivoPerfiles(await archivo.text());
+  if (archivo.size > MAX_BYTES_ARCHIVO) {
+    perfilesEstado.textContent = TEXTOS_IMPORTAR.error(TEXTOS_IMPORTAR.grande);
+    perfilesEstado.className = 'errores';
+    return;
+  }
+  const actuales = leerAlmacen(localStorage);
+  const r = leerArchivoPerfiles(await archivo.text(), actuales.perfiles.map((p) => p.nombre));
   if (!r.ok) {
     perfilesEstado.textContent = r.error;
     perfilesEstado.className = 'errores';
