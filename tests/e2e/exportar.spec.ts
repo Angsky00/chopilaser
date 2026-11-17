@@ -519,3 +519,75 @@ test.describe('dos pestañas', () => {
     await expect(page.getByTestId('salida')).toHaveValue(/S maximo \(\$30\): 255/);
   });
 });
+
+test.describe('perfiles en .json', () => {
+  test('exportar e importar perfiles', async ({ page }) => {
+    await crearPerfil(page, CASOS[0].perfilPrueba);
+    await page.getByTestId('maquina').click();
+    await expect(page.getByTestId('exportar-perfiles')).toBeEnabled();
+    const d = page.waitForEvent('download');
+    await page.getByTestId('exportar-perfiles').click();
+    const descarga = await d;
+    expect(descarga.suggestedFilename()).toBe('chopilaser-perfiles.json');
+    const json = JSON.parse(readFileSync(await descarga.path(), 'utf8'));
+    expect(json).toMatchObject({ formato: 'chopilaser-perfiles', version: 1, activo: 0 });
+    expect(json.perfiles).toHaveLength(1);
+    expect(json.perfiles[0].nombre).toBe(CASOS[0].perfilPrueba.nombre);
+
+    // Otro navegador vacío: se importa el archivo desde la primera pantalla.
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+    await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
+    await expect(page.getByTestId('exportar-perfiles')).toBeDisabled();
+    const otro = { ...json, activo: 1, perfiles: [...json.perfiles, CASOS[1].perfilPrueba] };
+    await page.getByTestId('importar-archivo').setInputFiles({
+      name: 'perfiles.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(otro)),
+    });
+    await expect(page.getByTestId('perfiles-estado')).toHaveText('Se importaron 2 perfiles.');
+    await expect(page.getByTestId('perfil-select').locator('option')).toHaveText([
+      CASOS[0].perfilPrueba.nombre,
+      CASOS[1].perfilPrueba.nombre,
+    ]);
+    await page.getByTestId('cancelar-perfil').click();
+    await expect(page.getByTestId('perfil-activo')).toHaveText(CASOS[1].perfilPrueba.nombre);
+  });
+
+  test('un archivo con un perfil no válido se rechaza entero, con error visible', async ({ page }) => {
+    await crearPerfil(page, CASOS[0].perfilPrueba);
+    const antes = await page.evaluate((k) => localStorage.getItem(k), CLAVE);
+    await page.getByTestId('maquina').click();
+    const malo = {
+      formato: 'chopilaser-perfiles',
+      version: 1,
+      activo: 0,
+      perfiles: [CASOS[1].perfilPrueba, { ...CASOS[2].perfilPrueba, sMax: '1,000' }],
+    };
+    await page.getByTestId('importar-archivo').setInputFiles({
+      name: 'malo.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(malo)),
+    });
+    await expect(page.getByTestId('perfiles-estado')).toHaveText(
+      'No se importó nada: el perfil 2 no es válido (Potencia máxima ($30): Escribe un número.)',
+    );
+    await expect(page.getByTestId('perfiles-estado')).toBeVisible();
+    expect(await page.evaluate((k) => localStorage.getItem(k), CLAVE)).toBe(antes);
+    await page.getByTestId('importar-archivo').setInputFiles({ name: 'x.json', mimeType: 'application/json', buffer: Buffer.from('{') });
+    await expect(page.getByTestId('perfiles-estado')).toHaveText('No se importó nada: el archivo no es JSON válido.');
+  });
+
+  test('localStorage dañado muestra un aviso visible y se conserva una copia al guardar', async ({ page }) => {
+    await page.evaluate((k) => localStorage.setItem(k, '{no es json'), CLAVE);
+    await page.reload();
+    await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
+    await expect(page.getByTestId('aviso-almacen')).toBeVisible();
+    await expect(page.getByTestId('aviso-almacen')).toContainText('dañados');
+    await llenarPerfil(page, CASOS[0].perfilPrueba);
+    await page.getByTestId('guardar-perfil').click();
+    await expect(page.getByTestId('app-principal')).toBeVisible();
+    await expect(page.getByTestId('aviso-almacen')).toBeHidden();
+    expect(await page.evaluate((k) => localStorage.getItem(k + '.danado'), CLAVE)).toBe('{no es json');
+  });
+});

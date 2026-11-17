@@ -37,6 +37,12 @@ export async function exportarGcode(texto: string, nombre: string): Promise<Ruta
     await w.close();
     return 'selector';
   }
+  descargarBlob(blob, nombre);
+  return 'descarga';
+}
+
+/** Descarga con Blob + <a download>. */
+export function descargarBlob(blob: Blob, nombre: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -46,5 +52,4 @@ export async function exportarGcode(texto: string, nombre: string): Promise<Ruta
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
-  return 'descarga';
 }

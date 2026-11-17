@@ -313,3 +313,9 @@ input:focus, select:focus, textarea:focus {
 }
 #fila-perfiles { margin-bottom: 12px; }
 input[readonly] { border-style: dashed; }
+
+/* Perfiles en .json y aviso de datos dañados. */
+.fila-json { margin-bottom: 14px; }
+#perfiles-estado { flex-basis: 100%; }
+#perfiles-estado:empty { display: none; }
+.aviso { padding: 12px 18px; margin-bottom: 16px; color: var(--text); border-left: 4px solid var(--orange); }

@@ -38,6 +38,13 @@ la SD. En los dos casos el archivo es idéntico, byte por byte.
   - `MAX_S = 100000`: S máximo ($30) no puede pasar de 100000.
   - `MAX_DIMENSION_MM = 5000`: el ancho y el fondo del área no pueden pasar de 5000 mm, y en el modo
     avanzado cada coordenada debe estar entre -5000 y 5000 mm.
+- **Perfiles en `.json`:** en «Máquina», «Exportar perfiles» descarga `chopilaser-perfiles.json`
+  (`{"formato": "chopilaser-perfiles", "version": 1, "activo": n, "perfiles": [...]}`) e «Importar
+  perfiles» lo lee. La importación es estricta: si algo no vale (otro formato, otra versión, un dato
+  desconocido, un valor que no es texto o un perfil no válido), se rechaza el archivo entero con un
+  error visible y no cambia nada. Los perfiles importados se añaden a los que ya había.
+- **Datos dañados:** si lo guardado en el navegador no se puede leer, se muestra un aviso en vez de
+  descartarlo en silencio; al guardar encima se conserva una copia en `chopilaser.perfiles.v1.danado`.
 - **Cuadrícula de prueba** de potencia × velocidad, en M3 y en M4, con celdas al 0 % y al 100 %,
   para calibrar materiales.
 - **Exportar `.gcode`.**

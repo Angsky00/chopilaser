@@ -16,8 +16,19 @@ import {
   type Perfil,
   type PerfilCrudo,
 } from './gcode';
-import { exportarGcode } from './exportar';
-import { CLAVE_PERFILES, escribirAlmacen, leerAlmacen, perfilActivo, type Almacen } from './perfiles';
+import { descargarBlob, exportarGcode } from './exportar';
+import {
+  CLAVE_PERFILES,
+  almacenDanado,
+  combinarImportados,
+  escribirAlmacen,
+  exportarPerfiles,
+  leerAlmacen,
+  leerArchivoPerfiles,
+  perfilActivo,
+  TEXTOS_IMPORTAR,
+  type Almacen,
+} from './perfiles';
 
 const t = tamanoCuadricula(CUADRICULA_PREDETERMINADA);
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -26,6 +37,7 @@ app.innerHTML = `
     <h1 class="marca">Chopi<span>Laser</span> <small>(nombre provisional)</small></h1>
   </header>
   <div class="contenido">
+  <p id="aviso-almacen" data-testid="aviso-almacen" class="aviso panel cut" role="alert" hidden>Los perfiles guardados en este navegador están dañados y no se pudieron leer. Importa tus perfiles desde un archivo o configura la máquina de nuevo; al guardar se conserva una copia de los datos dañados.</p>
 
   <section id="pantalla-maquina" data-testid="pantalla-maquina" class="panel cut asistente" aria-labelledby="t-maquina" hidden>
     <h2 id="t-maquina">Configura tu máquina</h2>
@@ -33,6 +45,12 @@ app.innerHTML = `
     <div id="fila-perfiles" class="fila" hidden>
       <label class="campo-linea">Perfil <select id="perfil-select" data-testid="perfil-select"></select></label>
       <button id="nuevo-perfil" data-testid="nuevo-perfil" class="btn btn-ghost" type="button">Nuevo perfil</button>
+    </div>
+    <div class="fila fila-json">
+      <button id="exportar-perfiles" data-testid="exportar-perfiles" class="btn btn-ghost" type="button">Exportar perfiles</button>
+      <button id="importar-perfiles" data-testid="importar-perfiles" class="btn btn-ghost" type="button">Importar perfiles</button>
+      <input id="importar-archivo" data-testid="importar-archivo" type="file" accept=".json,application/json" hidden />
+      <p id="perfiles-estado" data-testid="perfiles-estado" role="status"></p>
     </div>
     <div class="herramientas">
     <div class="bloque">
@@ -173,6 +191,10 @@ const btnGenerar = $<HTMLButtonElement>('generar');
 const btnExportar = $<HTMLButtonElement>('exportar');
 const estado = $<HTMLParagraphElement>('estado');
 const salida = $<HTMLTextAreaElement>('salida');
+const avisoAlmacen = $<HTMLParagraphElement>('aviso-almacen');
+const btnExportarPerfiles = $<HTMLButtonElement>('exportar-perfiles');
+const archivoImportar = $<HTMLInputElement>('importar-archivo');
+const perfilesEstado = $<HTMLParagraphElement>('perfiles-estado');
 
 let almacen: Almacen = leerAlmacen(localStorage);
 /** Índice del perfil que se edita; igual a perfiles.length si es uno nuevo. */
@@ -238,8 +260,17 @@ function llenarSelectorPerfiles(): void {
   perfilSelect.value = String(editando);
 }
 
+/** Aviso visible si localStorage tiene perfiles dañados, y estado del botón de exportar perfiles. */
+function actualizarAlmacen(): void {
+  avisoAlmacen.hidden = !almacenDanado(localStorage);
+  btnExportarPerfiles.disabled = !almacen.perfiles.some((p) => validarPerfil(p).ok);
+}
+
 function mostrarPantallaMaquina(primeraVez: boolean): void {
   invalidarGcode();
+  actualizarAlmacen();
+  perfilesEstado.textContent = '';
+  perfilesEstado.className = '';
   pantalla.hidden = false;
   principal.hidden = true;
   filaPerfiles.hidden = primeraVez;
@@ -253,6 +284,7 @@ function mostrarPantallaMaquina(primeraVez: boolean): void {
 }
 
 function mostrarApp(): void {
+  actualizarAlmacen();
   perfil = perfilActivo(almacen);
   if (!perfil) return mostrarPantallaMaquina(almacen.perfiles.length === 0);
   pantalla.hidden = true;
@@ -347,6 +379,32 @@ btnGuardar.addEventListener('click', () => {
   mostrarApp();
 });
 
+btnExportarPerfiles.addEventListener('click', () => {
+  almacen = leerAlmacen(localStorage);
+  const texto = exportarPerfiles(almacen);
+  descargarBlob(new Blob([texto], { type: 'application/json' }), 'chopilaser-perfiles.json');
+});
+
+$<HTMLButtonElement>('importar-perfiles').addEventListener('click', () => archivoImportar.click());
+
+archivoImportar.addEventListener('change', async () => {
+  const archivo = archivoImportar.files?.[0];
+  archivoImportar.value = '';
+  if (!archivo) return;
+  const r = leerArchivoPerfiles(await archivo.text());
+  if (!r.ok) {
+    perfilesEstado.textContent = r.error;
+    perfilesEstado.className = 'errores';
+    return;
+  }
+  almacen = combinarImportados(leerAlmacen(localStorage), r.archivo);
+  escribirAlmacen(localStorage, almacen);
+  perfil = perfilActivo(almacen);
+  mostrarPantallaMaquina(false);
+  perfilesEstado.textContent = TEXTOS_IMPORTAR.ok(r.archivo.perfiles.length);
+  perfilesEstado.className = 'ok';
+});
+
 btnCancelar.addEventListener('click', () => mostrarApp());
 $<HTMLButtonElement>('maquina').addEventListener('click', () => mostrarPantallaMaquina(false));
 
@@ -399,6 +457,7 @@ btnExportar.addEventListener('click', async () => {
 window.addEventListener('storage', (e) => {
   if (e.storageArea !== localStorage || (e.key !== null && e.key !== CLAVE_PERFILES)) return;
   almacen = leerAlmacen(localStorage);
+  actualizarAlmacen();
   if (!pantalla.hidden) {
     // Editando en la pantalla de máquina: no se pisa el formulario, solo la lista de perfiles.
     if (editando > almacen.perfiles.length) editando = almacen.perfiles.length;
