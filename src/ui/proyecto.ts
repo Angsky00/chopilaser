@@ -62,7 +62,7 @@ export const TEXTOS_PROYECTO = {
   alto: 'Alto',
   angulo: 'Ángulo (°)',
   proporcion: 'Mantener proporción',
-  ayudaLienzo: 'Arrastra para mover. Tiradores: escalar (con Mayús, proporcional) y girar (con Mayús, de 15° en 15°). Flechas: mover 1 mm (con Mayús, 10 mm). Supr: borrar.',
+  ayudaLienzo: 'Arrastra para mover. Tiradores: escalar (con Mayús, proporcional) y girar (con Mayús, de 15° en 15°). Flechas: mover 1 mm (con Mayús, 10 mm). Ctrl+A: seleccionar todo. Supr: borrar.',
   ayudaVista: 'Zoom: rueda del ratón, pellizco o + y −. Mover la vista: arrastra con la barra espaciadora pulsada, con el botón central o con dos dedos. 0 o «Ajustar»: ver toda el área.',
   ajustar: 'Ajustar',
   acercar: 'Acercar',
@@ -84,6 +84,9 @@ export const TEXTOS_PROYECTO = {
   descargado: 'Archivo descargado.',
   cancelado: 'Exportación cancelada.',
   errorGuardar: 'No se pudo guardar el archivo.',
+  sinPerfil: 'Antes de exportar, configura tu máquina.',
+  errorGenerar: 'Error inesperado al generar el G-code.',
+  vistaLienzo: 'Vista del lienzo',
   ajustesMaterial: 'Ajustes del material',
   ayudaAjustes: 'Llena estos valores con los que mejor resultado te dieron en la cuadrícula de prueba con este material. Se usan al crear capas nuevas.',
   guardarAjustes: 'Guardar ajustes',
@@ -203,7 +206,7 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
         contLienzo,
         h(
           'div',
-          { class: 'vista-lienzo', role: 'group', 'aria-label': 'Vista del lienzo' },
+          { class: 'vista-lienzo', role: 'group', 'aria-label': T.vistaLienzo },
           h('button', { type: 'button', class: 'btn btn-ghost', 'data-testid': 'zoom-menos', 'aria-label': T.alejar, title: T.alejar, text: '−' }),
           h('button', { type: 'button', class: 'btn btn-ghost', 'data-testid': 'zoom-mas', 'aria-label': T.acercar, title: T.acercar, text: '+' }),
           h('button', { type: 'button', class: 'btn btn-ghost', 'data-testid': 'ajustar-vista', text: T.ajustar }),
@@ -463,7 +466,7 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
     // Como en la fase 0: siempre con el perfil guardado ahora mismo.
     const actual = perfilGuardado();
     if (!actual) {
-      estadoExportar.textContent = 'Antes de exportar, configura tu máquina.';
+      estadoExportar.textContent = T.sinPerfil;
       estadoExportar.className = 'errores';
       return;
     }
@@ -478,7 +481,7 @@ export function montarProyecto(raiz: HTMLElement, perfilGuardado: () => Perfil |
     try {
       texto = generarGcode(r.trabajo, actual.config);
     } catch (e) {
-      estadoExportar.textContent = e instanceof ErrorGcode ? e.message : 'Error inesperado al generar el G-code.';
+      estadoExportar.textContent = e instanceof ErrorGcode ? e.message : T.errorGenerar;
       estadoExportar.className = 'errores';
       return;
     }

@@ -603,6 +603,13 @@ export class Lienzo {
         return;
       }
     }
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
+      this.sel = new Set(this.figuras.filter((f) => this.visible(f)).map((f) => f.id));
+      this.dibujar();
+      this.emitirSeleccion();
+      e.preventDefault();
+      return;
+    }
     if (!this.sel.size) return;
     const paso = e.shiftKey ? 10 : 1;
     const flechas: Record<string, [number, number]> = { ArrowLeft: [-paso, 0], ArrowRight: [paso, 0], ArrowUp: [0, paso], ArrowDown: [0, -paso] };
