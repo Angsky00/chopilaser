@@ -26,10 +26,18 @@ la SD. En los dos casos el archivo es idéntico, byte por byte.
   - el área de trabajo: ancho, alto y esquina del origen (0,0), o xmin, ymin, xmax, ymax.
 
   Tiene un botón con los valores de fábrica de GRBL 1.1 y una caja «Pegar salida de $$» que lee
-  $30, $32, $130 y $131. Al guardar se crea el primer perfil y se abre la app. Después, los perfiles
+  $30, $32, $130 y $131, y también $23 (dirección del homing), que se guarda solo como dato y se
+  muestra sin poder editarse. Los valores de $$ deben ser números estrictos (`^-?\d+(\.\d+)?$`):
+  `1e3` o `4.0.0` se ignoran, no se recortan. Al guardar se crea el primer perfil y se abre la app. Después, los perfiles
   se editan o se crean desde el botón «Máquina». Se guardan en el navegador (localStorage).
 - **Sin valores por defecto:** si el nombre, $30 o el área están vacíos, en 0, son negativos donde
   no se permite o no son números, no se puede guardar el perfil, generar ni exportar.
+- **Solo punto decimal:** `12.5` vale; `1,000` o `12,5` se rechazan con «Escribe un número.», sin
+  adivinar si la coma es de miles o decimal.
+- **Topes** (constantes en `src/gcode/config.ts`):
+  - `MAX_S = 100000`: S máximo ($30) no puede pasar de 100000.
+  - `MAX_DIMENSION_MM = 5000`: el ancho y el fondo del área no pueden pasar de 5000 mm, y en el modo
+    avanzado cada coordenada debe estar entre -5000 y 5000 mm.
 - **Cuadrícula de prueba** de potencia × velocidad, en M3 y en M4, con celdas al 0 % y al 100 %,
   para calibrar materiales.
 - **Exportar `.gcode`.**

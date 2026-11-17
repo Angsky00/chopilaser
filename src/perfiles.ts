@@ -9,7 +9,7 @@ export interface Almacen {
   perfiles: PerfilCrudo[];
 }
 
-const CAMPOS = ['nombre', 'sMax', 'laserMode32', 'camaAncho', 'camaAlto', 'origen', 'xMin', 'yMin', 'xMax', 'yMax'] as const;
+const CAMPOS = ['nombre', 'sMax', 'laserMode32', 'camaAncho', 'camaAlto', 'origen', 'xMin', 'yMin', 'xMax', 'yMax', 'homing23'] as const;
 
 function limpiar(p: unknown): PerfilCrudo {
   const r: Record<string, string> = {};

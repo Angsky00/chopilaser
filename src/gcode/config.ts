@@ -18,6 +18,11 @@ export const ORIGENES: { valor: OrigenCama; texto: string }[] = [
   { valor: 'personalizada', texto: 'Avanzado: área por coordenadas (mm)' },
 ];
 
+/** Tope de S máximo ($30). Por encima se considera un error de tecleo. */
+export const MAX_S = 100000;
+/** Tope de cada dimensión del área de trabajo (ancho y fondo), en mm. */
+export const MAX_DIMENSION_MM = 5000;
+
 /** Textos de error de los campos (textos finales de Marketing). */
 export const MENSAJES = {
   vacio: 'Este dato hace falta.',
@@ -27,9 +32,15 @@ export const MENSAJES = {
   perfilCambiado: 'El perfil cambió en otra pestaña. Vuelve a generar la cuadrícula.',
   // Solo para el modo avanzado del área.
   noEsNumero: 'Escribe un número.',
-  xInvertido: 'xmax debe ser mayor que xmin.',
-  yInvertido: 'ymax debe ser mayor que ymin.',
+  xInvertido: 'El máximo de X debe ser mayor que el mínimo.',
+  yInvertido: 'El máximo de Y debe ser mayor que el mínimo.',
 } as const;
+
+/** Textos provisionales de los topes (pendientes de Marketing). */
+export const mensajeMaximo = (max: number): string => `Escribe un número entre 0 y ${max}.`;
+export const mensajeRango = (min: number, max: number): string => `Escribe un número entre ${min} y ${max}.`;
+export const mensajeAnchoMaximo = (max: number): string => `El área no puede medir más de ${max} mm de ancho.`;
+export const mensajeFondoMaximo = (max: number): string => `El área no puede medir más de ${max} mm de fondo.`;
 
 /** Perfil tal como viene del formulario o de localStorage (texto). */
 export interface PerfilCrudo {
@@ -43,11 +54,15 @@ export interface PerfilCrudo {
   yMin?: unknown;
   xMax?: unknown;
   yMax?: unknown;
+  /** $23 (máscara de dirección del homing), solo como dato leído de $$. */
+  homing23?: unknown;
 }
 
 export interface Perfil {
   nombre: string;
   config: ConfigMaquina;
+  /** $23 tal como se leyó de $$, o null si no se leyó. No se usa para generar. */
+  homing23: number | null;
 }
 
 export type CampoPerfil = 'nombre' | 'sMax' | 'camaAncho' | 'camaAlto' | 'origen' | 'xMin' | 'yMin' | 'xMax' | 'yMax';
@@ -58,12 +73,15 @@ export type ResultadoPerfil =
 
 const NUMERO = /^[-+]?(\d+(\.\d*)?|\.\d+)$/;
 
-/** Convierte a número finito (acepta negativos y coma decimal), o devuelve null. */
+/**
+ * Convierte a número finito (acepta negativos), o devuelve null. El separador decimal
+ * es solo el punto: «1,000» se rechaza, no se adivina si la coma es de miles o decimal.
+ */
 export function numeroFinito(valor: unknown): number | null {
   let n: number;
   if (typeof valor === 'number') n = valor;
   else if (typeof valor === 'string') {
-    const t = valor.trim().replace(',', '.');
+    const t = valor.trim();
     if (!NUMERO.test(t)) return null;
     n = Number(t);
   } else return null;
@@ -101,12 +119,17 @@ export function erroresConfigMaquina(c: ConfigMaquina | null | undefined): strin
   if (typeof c.sMax !== 'number' || !Number.isFinite(c.sMax) || c.sMax <= 0)
     e.push('S máximo ($30) es obligatorio y debe ser un número mayor que 0.');
   else if (Math.floor(c.sMax * 1000) < 1) e.push('S máximo ($30) es demasiado pequeño.');
+  else if (c.sMax > MAX_S) e.push(`S máximo ($30) no puede pasar de ${MAX_S}.`);
   const a = c.area;
   if (!a || ![a.xMin, a.yMin, a.xMax, a.yMax].every((v) => typeof v === 'number' && Number.isFinite(v)))
     e.push('El área de trabajo no es válida.');
   else {
     if (a.xMax - a.xMin < 0.001) e.push('El área de trabajo debe tener un ancho mayor que 0 (xmax > xmin).');
     if (a.yMax - a.yMin < 0.001) e.push('El área de trabajo debe tener un alto mayor que 0 (ymax > ymin).');
+    if (a.xMax - a.xMin > MAX_DIMENSION_MM) e.push(`El área de trabajo no puede medir más de ${MAX_DIMENSION_MM} mm en X.`);
+    if (a.yMax - a.yMin > MAX_DIMENSION_MM) e.push(`El área de trabajo no puede medir más de ${MAX_DIMENSION_MM} mm en Y.`);
+    if (![a.xMin, a.yMin, a.xMax, a.yMax].every((v) => Math.abs(v) <= MAX_DIMENSION_MM))
+      e.push(`Las coordenadas del área deben estar entre -${MAX_DIMENSION_MM} y ${MAX_DIMENSION_MM} mm.`);
   }
   return e;
 }
@@ -118,14 +141,22 @@ function vacio(v: unknown): boolean {
 export function validarPerfil(crudo: PerfilCrudo | null | undefined): ResultadoPerfil {
   const c = crudo ?? {};
   const porCampo: Partial<Record<CampoPerfil, string>> = {};
-  const positivo = (campo: CampoPerfil): number | null => {
+  const positivo = (campo: CampoPerfil, max: number): number | null => {
     const v = c[campo];
     if (vacio(v)) {
       porCampo[campo] = MENSAJES.vacio;
       return null;
     }
+    if (typeof v === 'string' && v.includes(',')) {
+      porCampo[campo] = MENSAJES.noEsNumero;
+      return null;
+    }
     const n = numeroPositivo(v);
     if (n === null) porCampo[campo] = MENSAJES.numeroInvalido;
+    else if (n > max) {
+      porCampo[campo] = mensajeMaximo(max);
+      return null;
+    }
     return n;
   };
   const finito = (campo: CampoPerfil): number | null => {
@@ -136,12 +167,16 @@ export function validarPerfil(crudo: PerfilCrudo | null | undefined): ResultadoP
     }
     const n = numeroFinito(v);
     if (n === null) porCampo[campo] = MENSAJES.noEsNumero;
+    else if (Math.abs(n) > MAX_DIMENSION_MM) {
+      porCampo[campo] = mensajeRango(-MAX_DIMENSION_MM, MAX_DIMENSION_MM);
+      return null;
+    }
     return n;
   };
 
   const nombre = typeof c.nombre === 'string' ? c.nombre.trim() : '';
   if (!nombre) porCampo.nombre = MENSAJES.vacio;
-  let sMax = positivo('sMax');
+  let sMax = positivo('sMax', MAX_S);
   if (sMax !== null && Math.floor(sMax * 1000) < 1) {
     porCampo.sMax = MENSAJES.numeroInvalido;
     sMax = null;
@@ -150,26 +185,36 @@ export function validarPerfil(crudo: PerfilCrudo | null | undefined): ResultadoP
   let area: AreaTrabajo | null = null;
   if (!origen) {
     porCampo.origen = MENSAJES.vacio;
-    positivo('camaAncho');
-    positivo('camaAlto');
+    positivo('camaAncho', MAX_DIMENSION_MM);
+    positivo('camaAlto', MAX_DIMENSION_MM);
   } else if (origen === 'personalizada') {
     const [xMin, yMin, xMax, yMax] = (['xMin', 'yMin', 'xMax', 'yMax'] as const).map(finito);
     if (xMin !== null && xMax !== null && xMax - xMin < 0.001) porCampo.xMax = MENSAJES.xInvertido;
+    else if (xMin !== null && xMax !== null && xMax - xMin > MAX_DIMENSION_MM) porCampo.xMax = mensajeAnchoMaximo(MAX_DIMENSION_MM);
     if (yMin !== null && yMax !== null && yMax - yMin < 0.001) porCampo.yMax = MENSAJES.yInvertido;
+    else if (yMin !== null && yMax !== null && yMax - yMin > MAX_DIMENSION_MM) porCampo.yMax = mensajeFondoMaximo(MAX_DIMENSION_MM);
     if (xMin !== null && yMin !== null && xMax !== null && yMax !== null) area = { xMin, yMin, xMax, yMax };
   } else {
-    const ancho = positivo('camaAncho');
-    const alto = positivo('camaAlto');
+    const ancho = positivo('camaAncho', MAX_DIMENSION_MM);
+    const alto = positivo('camaAlto', MAX_DIMENSION_MM);
     if (ancho !== null && alto !== null) area = areaDesdeCama(ancho, alto, origen);
   }
   const errores = Object.entries(porCampo).map(([campo, m]) => `${campo}: ${m}`);
   if (errores.length === 0 && sMax !== null && area !== null) {
     const config: ConfigMaquina = { sMax, laserMode32: modoLaser(c.laserMode32), area };
     const extra = erroresConfigMaquina(config);
-    if (extra.length === 0) return { ok: true, perfil: { nombre, config } };
+    if (extra.length === 0) return { ok: true, perfil: { nombre, config, homing23: mascara23(c.homing23) } };
     errores.push(...extra);
   }
   return { ok: false, errores, porCampo };
+}
+
+/** $23 válido (entero de 0 a 255) o null. */
+export function mascara23(v: unknown): number | null {
+  const t = typeof v === 'number' ? String(v) : typeof v === 'string' ? v.trim() : '';
+  if (!/^\d{1,3}$/.test(t)) return null;
+  const n = Number(t);
+  return n <= 255 ? n : null;
 }
 
 /**
@@ -181,21 +226,33 @@ export const PRESET_GRBL11: Required<Pick<PerfilCrudo, 'sMax' | 'laserMode32'>> 
   laserMode32: '0',
 };
 
+export type CampoDolar = 'sMax' | 'laserMode32' | 'camaAncho' | 'camaAlto' | 'homing23';
+
+/** Número estricto de $$: sin exponentes, sin signo +, sin varios puntos. */
+const NUMERO_DOLAR = /^-?\d+(\.\d+)?$/;
+
 /**
  * Lee la salida de `$$` de GRBL y devuelve los campos que encuentra:
- * $30 -> sMax, $32 -> laserMode32, $130 -> ancho, $131 -> alto.
+ * $30 -> sMax, $32 -> laserMode32, $130 -> ancho, $131 -> alto, $23 -> homing23 (solo dato).
+ * Un valor que no es un número estricto (p. ej. «1e3» o «4.0.0») se ignora, no se recorta.
  */
-export function leerSalidaDolarDolar(texto: string): Partial<Record<'sMax' | 'laserMode32' | 'camaAncho' | 'camaAlto', string>> {
-  const r: Partial<Record<'sMax' | 'laserMode32' | 'camaAncho' | 'camaAlto', string>> = {};
-  const campos: Record<string, 'sMax' | 'laserMode32' | 'camaAncho' | 'camaAlto'> = {
+export function leerSalidaDolarDolar(texto: string): Partial<Record<CampoDolar, string>> {
+  const r: Partial<Record<CampoDolar, string>> = {};
+  const campos: Record<string, CampoDolar> = {
+    '23': 'homing23',
     '30': 'sMax',
     '32': 'laserMode32',
     '130': 'camaAncho',
     '131': 'camaAlto',
   };
   for (const linea of texto.split(/\r?\n/)) {
-    const m = /^\s*\$(\d+)\s*=\s*([-+]?\d+(?:\.\d+)?)/.exec(linea);
-    if (m && campos[m[1]]) r[campos[m[1]]] = String(Number(m[2]));
+    // «$30=1000», y también «$30=1000 (rpm max)» como en GRBL 0.9.
+    const m = /^\s*\$(\d+)\s*=\s*(\S+)(?:\s+\(.*\))?\s*$/.exec(linea);
+    if (!m || !campos[m[1]] || !NUMERO_DOLAR.test(m[2])) continue;
+    const campo = campos[m[1]];
+    if (campo === 'homing23' && mascara23(m[2]) === null) continue;
+    if (campo === 'laserMode32' && m[2] !== '0' && m[2] !== '1') continue;
+    r[campo] = String(Number(m[2]));
   }
   return r;
 }

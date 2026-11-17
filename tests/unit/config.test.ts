@@ -10,6 +10,9 @@ import {
   PRESET_GRBL11,
   MENSAJES,
   ORIGENES,
+  MAX_S,
+  MAX_DIMENSION_MM,
+  mascara23,
   validarPerfil,
 } from '../../src/gcode';
 import { leerAlmacen, perfilActivo, CLAVE_PERFILES } from '../../src/perfiles';
@@ -38,16 +41,58 @@ describe('perfil de máquina', () => {
     const r = validarPerfil({ ...base, laserMode32: '1' });
     expect(r).toEqual({
       ok: true,
-      perfil: { nombre: 'Prueba', config: { sMax: 1000, laserMode32: 1, area: { xMin: 0, yMin: 0, xMax: 400, yMax: 400 } } },
+      perfil: {
+        nombre: 'Prueba',
+        config: { sMax: 1000, laserMode32: 1, area: { xMin: 0, yMin: 0, xMax: 400, yMax: 400 } },
+        homing23: null,
+      },
     });
     const r2 = validarPerfil(base);
     expect(r2.ok && r2.perfil.config.laserMode32).toBe(null);
   });
 
-  it('acepta coma decimal y negativos donde corresponde', () => {
-    expect(numeroPositivo('12,5')).toBe(12.5);
+  it('acepta negativos donde corresponde y solo el punto como decimal', () => {
+    expect(numeroPositivo('12.5')).toBe(12.5);
     expect(numeroFinito('-300')).toBe(-300);
     expect(numeroPositivo('-300')).toBe(null);
+    // La coma no se adivina: «1,000» no es 1 ni 1000.
+    for (const v of ['1,000', '12,5', '1,000.5', '-5,5']) {
+      expect(numeroFinito(v)).toBe(null);
+      expect(numeroPositivo(v)).toBe(null);
+    }
+  });
+
+  it('una coma en un campo da «Escribe un número.»', () => {
+    const r = validarPerfil({ ...base, sMax: '1,000', camaAncho: '12,5', camaAlto: '400' });
+    expect(!r.ok && r.porCampo).toEqual({ sMax: 'Escribe un número.', camaAncho: 'Escribe un número.' });
+    const r2 = validarPerfil({ nombre: 'P', sMax: '1', origen: 'personalizada', xMin: '-10', yMin: '-5,5', xMax: '10', yMax: '0' });
+    expect(!r2.ok && r2.porCampo).toEqual({ yMin: 'Escribe un número.' });
+  });
+
+  it('topes: $30 hasta MAX_S y cada dimensión hasta MAX_DIMENSION_MM', () => {
+    expect(MAX_S).toBe(100000);
+    expect(MAX_DIMENSION_MM).toBe(5000);
+    expect(validarPerfil({ ...base, sMax: '100000', camaAncho: '5000', camaAlto: '5000' }).ok).toBe(true);
+    const r = validarPerfil({ ...base, sMax: '100000.001', camaAncho: '5000.001', camaAlto: '1e9' });
+    expect(!r.ok && r.porCampo).toEqual({
+      sMax: 'Escribe un número entre 0 y 100000.',
+      camaAncho: 'Escribe un número entre 0 y 5000.',
+      camaAlto: 'Escribe un número mayor que 0.',
+    });
+    expect(validarPerfil({ ...base, camaAlto: '99999' }).ok).toBe(false);
+    const av = { nombre: 'P', sMax: '1', origen: 'personalizada' };
+    expect(validarPerfil({ ...av, xMin: '-5000', yMin: '-2500', xMax: '0', yMax: '2500' }).ok).toBe(true);
+    const r2 = validarPerfil({ ...av, xMin: '-3000', yMin: '-3000', xMax: '3000', yMax: '2001' });
+    expect(!r2.ok && r2.porCampo).toEqual({
+      xMax: 'El área no puede medir más de 5000 mm de ancho.',
+      yMax: 'El área no puede medir más de 5000 mm de fondo.',
+    });
+    const r3 = validarPerfil({ ...av, xMin: '-5001', yMin: '0', xMax: '0', yMax: '10' });
+    expect(!r3.ok && r3.porCampo).toEqual({ xMin: 'Escribe un número entre -5000 y 5000.' });
+    // El generador también rechaza configuraciones fuera de tope.
+    expect(erroresConfigMaquina({ sMax: 100001, laserMode32: null, area: { xMin: 0, yMin: 0, xMax: 10, yMax: 10 } })).not.toEqual([]);
+    expect(erroresConfigMaquina({ sMax: 1000, laserMode32: null, area: { xMin: 0, yMin: 0, xMax: 5001, yMax: 10 } })).not.toEqual([]);
+    expect(erroresConfigMaquina({ sMax: 1000, laserMode32: null, area: { xMin: 0, yMin: 0, xMax: 5000, yMax: 5000 } })).toEqual([]);
   });
 
   it('sin perfil no hay valores por defecto', () => {
@@ -125,7 +170,7 @@ describe('área de trabajo', () => {
   });
 
   it('personalizada usa xmin, ymin, xmax, ymax', () => {
-    const r = validarPerfil({ nombre: 'P', sMax: '1', origen: 'personalizada', xMin: '-10', yMin: '-5,5', xMax: '10', yMax: '0' });
+    const r = validarPerfil({ nombre: 'P', sMax: '1', origen: 'personalizada', xMin: '-10', yMin: '-5.5', xMax: '10', yMax: '0' });
     expect(r.ok && r.perfil.config.area).toEqual({ xMin: -10, yMin: -5.5, xMax: 10, yMax: 0 });
   });
 
@@ -148,6 +193,22 @@ describe('preset de GRBL 1.1 y salida de $$', () => {
   it('lee $30, $32, $130 y $131 de la salida de $$', () => {
     const salida = '$0=10\r\n$30=1000\n$31=0\n$32=1\n$100=80.000\n$130=410.000\n$131=400.500\n$132=50.000\nok\n';
     expect(leerSalidaDolarDolar(salida)).toEqual({ sMax: '1000', laserMode32: '1', camaAncho: '410', camaAlto: '400.5' });
+  });
+
+  it('lee $23 como dato', () => {
+    expect(leerSalidaDolarDolar('$23=3\n$30=1000\n')).toEqual({ homing23: '3', sMax: '1000' });
+    expect(mascara23('3')).toBe(3);
+    expect(mascara23('256')).toBe(null);
+    expect(mascara23('1.5')).toBe(null);
+    expect(mascara23('')).toBe(null);
+    const r = validarPerfil({ ...base, homing23: '3' });
+    expect(r.ok && r.perfil.homing23).toBe(3);
+  });
+
+  it('ignora (no recorta) valores que no son números estrictos', () => {
+    const salida = '$30=1e3\n$130=4.0.0\n$131=400abc\n$23=1.5\n$32=2\n$30=+100\n$131=.5\n$130=5.\n';
+    expect(leerSalidaDolarDolar(salida)).toEqual({});
+    expect(leerSalidaDolarDolar('$130=-300.25\n$30=1000 (spindle max, rpm)\n')).toEqual({ camaAncho: '-300.25', sMax: '1000' });
   });
 
   it('con texto sin ajustes no devuelve nada', () => {
