@@ -9,6 +9,7 @@ import {
   numeroPositivo,
   PRESET_GRBL11,
   MENSAJES,
+  ORIGENES,
   validarPerfil,
 } from '../../src/gcode';
 import { leerAlmacen, perfilActivo, CLAVE_PERFILES } from '../../src/perfiles';
@@ -111,6 +112,16 @@ describe('área de trabajo', () => {
     expect(areaDesdeCama(300, 200, 'superior-derecha')).toEqual({ xMin: -300, yMin: -200, xMax: 0, yMax: 0 });
     expect(areaDesdeCama(300, 200, 'superior-izquierda')).toEqual({ xMin: 0, yMin: -200, xMax: 300, yMax: 0 });
     expect(areaDesdeCama(300, 200, 'inferior-derecha')).toEqual({ xMin: -300, yMin: 0, xMax: 0, yMax: 200 });
+  });
+
+  it('textos de las opciones de origen', () => {
+    expect(ORIGENES.map((o) => o.texto)).toEqual([
+      'Abajo a la izquierda',
+      'Abajo a la derecha',
+      'Arriba a la izquierda',
+      'Arriba a la derecha',
+      'Avanzado: área por coordenadas (mm)',
+    ]);
   });
 
   it('personalizada usa xmin, ymin, xmax, ymax', () => {

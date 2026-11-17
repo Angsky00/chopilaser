@@ -60,7 +60,7 @@ app.innerHTML = `
       <div class="campo">
         <label for="modo-32">Modo láser ($32)</label>
         <select id="modo-32" data-testid="modo-32" aria-describedby="ayuda-32">
-          <option value="">—</option>
+          <option value="">Elige una opción</option>
           <option value="1">Activado ($32=1)</option>
           <option value="0">Desactivado ($32=0)</option>
         </select>
@@ -82,6 +82,7 @@ app.innerHTML = `
           <small class="ayuda ancho-completo" id="ayuda-area">Lo que de verdad recorre el cabezal sobre tu mesa. En $$ viene como $130 y $131.</small>
         </div>
         <div id="campos-area" class="rejilla" hidden>
+          <small class="ayuda ancho-completo" id="ayuda-avanzado" data-testid="ayuda-avanzado">Para máquinas que quedan en coordenadas negativas después del homing.</small>
           ${(['xMin', 'yMin', 'xMax', 'yMax'] as const)
             .map((c) => {
               const id = c.replace(/([A-Z])/, '-$1').toLowerCase();
@@ -96,7 +97,7 @@ app.innerHTML = `
         <div class="campo">
           <label for="origen">¿Dónde queda el 0,0 después del homing?</label>
           <select id="origen" data-testid="origen" aria-describedby="ayuda-origen error-origen">
-            <option value="">—</option>
+            <option value="">Elige una opción</option>
             ${ORIGENES.map((o) => `<option value="${o.valor}">${o.texto}</option>`).join('')}
           </select>
           <small class="ayuda" id="ayuda-origen">Es la esquina a la que va la máquina cuando busca sus topes.</small>

@@ -79,6 +79,14 @@ test.describe('primera vez', () => {
     await expect(page.getByLabel('Fondo (Y)')).toBeVisible();
     await expect(page.getByLabel('¿Dónde queda el 0,0 después del homing?')).toBeVisible();
     await expect(page.getByTestId('guardar-perfil')).toHaveText('Guardar y empezar');
+    for (const id of ['modo-32', 'origen']) {
+      await expect(page.getByTestId(id).locator('option').first()).toHaveText('Elige una opción');
+      await expect(page.getByTestId(id).locator('option:checked')).toHaveText('Elige una opción');
+    }
+    await expect(page.getByTestId('origen').locator('option[value="personalizada"]')).toHaveText(
+      'Avanzado: área por coordenadas (mm)',
+    );
+    await expect(page.getByTestId('ayuda-avanzado')).toBeHidden();
     await expect(page.getByTestId('errores')).toHaveText('Completa los campos marcados para continuar.');
     await expect(page.getByTestId('error-nombre')).toHaveText('Este dato hace falta.');
     await expect(page.getByTestId('error-sMax')).toHaveText('Este dato hace falta.');
@@ -122,6 +130,10 @@ test.describe('primera vez', () => {
 
   test('área personalizada no válida bloquea el guardado', async ({ page }) => {
     await llenarPerfil(page, { nombre: 'P', sMax: '1', origen: 'personalizada', xMin: '0', yMin: '0', xMax: '10', yMax: '10' });
+    await expect(page.getByTestId('ayuda-avanzado')).toHaveText(
+      'Para máquinas que quedan en coordenadas negativas después del homing.',
+    );
+    await expect(page.getByTestId('cama-ancho')).toBeHidden();
     await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
     await page.getByTestId('x-max').fill('-1');
     await expect(page.getByTestId('guardar-perfil')).toBeDisabled();

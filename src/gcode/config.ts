@@ -15,7 +15,7 @@ export const ORIGENES: { valor: OrigenCama; texto: string }[] = [
   { valor: 'superior-izquierda', texto: 'Arriba a la izquierda' },
   { valor: 'superior-derecha', texto: 'Arriba a la derecha' },
   // Opción avanzada: área con xmin, ymin, xmax, ymax.
-  { valor: 'personalizada', texto: 'Avanzado: xmin, ymin, xmax, ymax' },
+  { valor: 'personalizada', texto: 'Avanzado: área por coordenadas (mm)' },
 ];
 
 /** Textos de error de los campos (textos finales de Marketing). */
