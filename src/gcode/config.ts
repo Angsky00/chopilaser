@@ -23,6 +23,8 @@ export const MENSAJES = {
   vacio: 'Este dato hace falta.',
   numeroInvalido: 'Escribe un número mayor que 0.',
   exportarSinPerfil: 'Antes de exportar, configura tu máquina.',
+  // Provisional (pendiente de Marketing).
+  perfilCambiado: 'El perfil cambió en otra pestaña. Vuelve a generar la cuadrícula.',
   // Solo para el modo avanzado del área.
   noEsNumero: 'Escribe un número.',
   xInvertido: 'xmax debe ser mayor que xmin.',

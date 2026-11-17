@@ -428,3 +428,55 @@ test.describe('consola', () => {
     await ctx.close();
   });
 });
+
+test.describe('dos pestañas', () => {
+  async function exportarDescarga(page: Page): Promise<Buffer> {
+    await page.evaluate(() => {
+      delete (window as any).showSaveFilePicker;
+      delete (Object.getPrototypeOf(window) as any).showSaveFilePicker;
+    });
+    const d = page.waitForEvent('download');
+    await page.getByTestId('exportar').click();
+    return readFileSync(await (await d).path());
+  }
+
+  test('un cambio de perfil en otra pestaña invalida la cuadrícula y actualiza el perfil', async ({ page, context }) => {
+    await crearPerfil(page, CASOS[0].perfilPrueba);
+    await page.getByTestId('generar').click();
+    await expect(page.getByTestId('exportar')).toBeEnabled();
+
+    const otra = await context.newPage();
+    await otra.goto('./');
+    await expect(otra.getByTestId('perfil-activo')).toHaveText(CASOS[0].perfilPrueba.nombre);
+    await otra.getByTestId('maquina').click();
+    await otra.getByTestId('nuevo-perfil').click();
+    await llenarPerfil(otra, CASOS[1].perfilPrueba);
+    await otra.getByTestId('guardar-perfil').click();
+    await expect(otra.getByTestId('perfil-activo')).toHaveText(CASOS[1].perfilPrueba.nombre);
+
+    // La primera pestaña se entera por el evento storage.
+    await expect(page.getByTestId('perfil-activo')).toHaveText(CASOS[1].perfilPrueba.nombre);
+    await expect(page.getByTestId('perfil-detalle')).toContainText('$30 = 255');
+    await expect(page.getByTestId('exportar')).toBeDisabled();
+    await expect(page.getByTestId('salida')).toHaveValue('');
+    await expect(page.getByTestId('estado')).toHaveText('El perfil cambió en otra pestaña. Vuelve a generar la cuadrícula.');
+
+    await page.getByTestId('generar').click();
+    comprobarArchivo(await exportarDescarga(page), CASOS[1], `${test.info().project.name}_dos_pestanas.gcode`);
+    await otra.close();
+  });
+
+  test('exportar siempre regenera con el perfil guardado, aunque no llegue el evento', async ({ page }) => {
+    await crearPerfil(page, CASOS[0].perfilPrueba);
+    await page.getByTestId('generar').click();
+    // Cambia el perfil activo sin evento storage (en la misma pestaña no se dispara).
+    await page.evaluate(
+      ([k, a, b]) => localStorage.setItem(k, JSON.stringify({ activo: 1, perfiles: [a, b] })),
+      [CLAVE, CASOS[0].perfilPrueba, CASOS[1].perfilPrueba] as const,
+    );
+    const bytes = await exportarDescarga(page);
+    comprobarArchivo(bytes, CASOS[1], `${test.info().project.name}_regenera.gcode`);
+    await expect(page.getByTestId('perfil-activo')).toHaveText(CASOS[1].perfilPrueba.nombre);
+    await expect(page.getByTestId('salida')).toHaveValue(/S maximo \(\$30\): 255/);
+  });
+});

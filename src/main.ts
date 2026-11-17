@@ -17,7 +17,7 @@ import {
   type PerfilCrudo,
 } from './gcode';
 import { exportarGcode } from './exportar';
-import { escribirAlmacen, leerAlmacen, perfilActivo, type Almacen } from './perfiles';
+import { CLAVE_PERFILES, escribirAlmacen, leerAlmacen, perfilActivo, type Almacen } from './perfiles';
 
 const t = tamanoCuadricula(CUADRICULA_PREDETERMINADA);
 const app = document.querySelector<HTMLDivElement>('#app')!;
@@ -251,11 +251,20 @@ function mostrarApp(): void {
   if (!perfil) return mostrarPantallaMaquina(almacen.perfiles.length === 0);
   pantalla.hidden = true;
   principal.hidden = false;
-  const a = perfil.config.area;
-  $<HTMLElement>('perfil-activo').textContent = perfil.nombre;
-  $<HTMLElement>('perfil-detalle').textContent =
-    `($30 = ${fmtArea(perfil.config.sMax)}; área X ${fmtArea(a.xMin)} a ${fmtArea(a.xMax)}, Y ${fmtArea(a.yMin)} a ${fmtArea(a.yMax)} mm)`;
+  mostrarPerfil(perfil);
   invalidarGcode();
+}
+
+function mostrarPerfil(p: Perfil): void {
+  const a = p.config.area;
+  $<HTMLElement>('perfil-activo').textContent = p.nombre;
+  $<HTMLElement>('perfil-detalle').textContent =
+    `($30 = ${fmtArea(p.config.sMax)}; área X ${fmtArea(a.xMin)} a ${fmtArea(a.xMax)}, Y ${fmtArea(a.yMin)} a ${fmtArea(a.yMax)} mm)`;
+}
+
+/** G-code de la cuadrícula para un perfil. Lanza ErrorGcode si no se puede generar. */
+function gcodeCuadricula(p: Perfil): string {
+  return generarGcode(generarCuadricula(tamanoArea(p.config.area)), p.config);
 }
 
 function invalidarGcode(): void {
@@ -337,8 +346,7 @@ btnGenerar.addEventListener('click', () => {
   invalidarGcode();
   if (!perfil) return mostrarApp();
   try {
-    const trabajo = generarCuadricula(tamanoArea(perfil.config.area));
-    gcode = generarGcode(trabajo, perfil.config);
+    gcode = gcodeCuadricula(perfil);
     salida.value = gcode;
     btnExportar.disabled = false;
     estado.textContent = `Cuadrícula generada: ${gcode.split('\n').length - 1} líneas.`;
@@ -348,21 +356,50 @@ btnGenerar.addEventListener('click', () => {
 });
 
 btnExportar.addEventListener('click', async () => {
-  // Se vuelve a validar el perfil guardado justo antes de exportar.
+  // Se exporta SIEMPRE lo generado con el perfil guardado ahora (puede haber cambiado
+  // en otra pestaña), nunca el G-code que quedó en pantalla.
   almacen = leerAlmacen(localStorage);
-  if (!perfilActivo(almacen) || gcode === null) {
+  const actual = perfilActivo(almacen);
+  if (!actual || gcode === null) {
     invalidarGcode();
     estado.textContent = MENSAJES.exportarSinPerfil;
     return;
   }
+  let texto: string;
   try {
-    const ruta = await exportarGcode(gcode, 'cuadricula_prueba.gcode');
+    texto = gcodeCuadricula(actual);
+  } catch (e) {
+    invalidarGcode();
+    estado.textContent = e instanceof ErrorGcode ? e.message : 'Error inesperado al generar el G-code.';
+    return;
+  }
+  perfil = actual;
+  mostrarPerfil(actual);
+  gcode = texto;
+  salida.value = texto;
+  try {
+    const ruta = await exportarGcode(texto, 'cuadricula_prueba.gcode');
     estado.textContent =
       ruta === 'selector' ? 'Archivo guardado.' : ruta === 'descarga' ? 'Archivo descargado.' : 'Exportación cancelada.';
     estado.dataset.ruta = ruta;
   } catch {
     estado.textContent = 'No se pudo guardar el archivo.';
   }
+});
+
+// Otra pestaña cambió los perfiles: se descarta la cuadrícula generada y se actualiza el perfil.
+window.addEventListener('storage', (e) => {
+  if (e.storageArea !== localStorage || (e.key !== null && e.key !== CLAVE_PERFILES)) return;
+  almacen = leerAlmacen(localStorage);
+  if (!pantalla.hidden) {
+    // Editando en la pantalla de máquina: no se pisa el formulario, solo la lista de perfiles.
+    if (editando > almacen.perfiles.length) editando = almacen.perfiles.length;
+    llenarSelectorPerfiles();
+    return;
+  }
+  const habiaGcode = gcode !== null;
+  mostrarApp();
+  if (habiaGcode && !principal.hidden) estado.textContent = MENSAJES.perfilCambiado;
 });
 
 mostrarApp();
