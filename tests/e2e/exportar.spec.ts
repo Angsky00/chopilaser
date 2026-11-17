@@ -406,3 +406,25 @@ test.describe('estilo', () => {
     expect(externas).toEqual([]);
   });
 });
+
+test.describe('consola', () => {
+  test('al cargar no hay avisos ni errores en la consola', async ({ browser, baseURL }) => {
+    // Contexto nuevo y escucha antes de la primera carga: así el navegador decodifica
+    // las fuentes desde cero (Firefox avisaba «downloadable font: glyf: Glyph bbox was incorrect»).
+    const ctx = await browser.newContext({ baseURL });
+    const page = await ctx.newPage();
+    const mensajes: string[] = [];
+    page.on('console', (m) => {
+      if (m.type() === 'warning' || m.type() === 'error') mensajes.push(`${m.type()}: ${m.text()}`);
+    });
+    page.on('pageerror', (e) => mensajes.push(`pageerror: ${e.message}`));
+    await page.goto('./');
+    await page.evaluate(() =>
+      Promise.all(['500', '600', '700'].map((w) => document.fonts.load(`${w} 16px Rajdhani`))),
+    );
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(500);
+    expect(mensajes).toEqual([]);
+    await ctx.close();
+  });
+});

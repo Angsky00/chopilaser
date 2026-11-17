@@ -100,8 +100,8 @@ cambio lo hace QA, no el generador.
 - Paleta y estilo de la maqueta aprobada por Angel: fondo con rejilla, paneles con esquinas
   cortadas y línea naranja a cian en el encabezado. El texto sobre naranja es oscuro (`#140c08`).
 - Tipografía **Rajdhani** (SIL Open Font License 1.1), servida desde la propia app, sin CDN:
-  `src/fuentes/rajdhani-latin-{500,600,700}-normal.woff2` (de Fontsource 5.3.0, subconjunto
-  latino). La licencia completa está en `src/fuentes/Rajdhani-OFL.txt`.
+  `src/fuentes/rajdhani-latin-{500,600,700}-normal.woff2`, generadas con fontTools desde los TTF
+  oficiales de google/fonts (subconjunto latino, bbox recalculados) con `sh tools/generar_fuentes.sh`. La licencia completa está en `src/fuentes/Rajdhani-OFL.txt`.
 - Contraste WCAG AA: `node tools/contraste.mjs` calcula cada par texto/fondo de `src/estilo.css`
   y falla si alguno no cumple. También corre en Vitest (`tests/unit/contraste.test.ts`).
 - Capturas en 1280 y 390 px, con las de la maqueta para comparar:
