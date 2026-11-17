@@ -46,6 +46,11 @@
   --ok: #4fbd78;
   --error: #ff8f8f;
   --error-borde: #e05252;
+  --lienzo-area: #eef3f8;
+  --lienzo-rejilla: #d3dfeb;
+  --lienzo-rejilla-mayor: #a9bfd4;
+  --lienzo-seleccion: #1c6a86;
+  --lienzo-fuera: #c62f2f;
   --font-ui: 'Rajdhani', system-ui, 'Segoe UI', sans-serif;
   --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Menlo, Consolas, monospace;
   --shadow-panel: 0 0 0 1px rgba(47, 126, 171, 0.28), 0 18px 40px rgba(0, 0, 0, 0.45);
@@ -319,3 +324,45 @@ input[readonly] { border-style: dashed; }
 #perfiles-estado { flex-basis: 100%; }
 #perfiles-estado:empty { display: none; }
 .aviso { padding: 12px 18px; margin-bottom: 16px; color: var(--text); border-left: 4px solid var(--orange); }
+
+/* Fase 1: proyecto y lienzo. */
+.proyecto h3 { margin: 0 0 10px; font-size: 1.05rem; letter-spacing: 0.04em; }
+.inicio-proyecto .fila { margin-bottom: 10px; }
+.barra-proyecto { margin-bottom: 8px; }
+.barra-proyecto p { margin: 0; margin-right: auto; }
+#proyecto [role="status"]:empty, .lista-capas .error-campo:empty { display: none; }
+.mesa { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 16px; align-items: start; }
+.columna-lienzo { min-width: 0; }
+.lienzo-contenedor { border: 1px solid var(--line-hot); background: var(--bg-inset); }
+.lienzo-contenedor.soltar { outline: 2px dashed var(--cyan); outline-offset: -4px; }
+.lienzo { display: block; width: 100%; height: auto; max-height: 72vh; touch-action: none; user-select: none; -webkit-user-select: none; }
+.lienzo:focus-visible { outline: 2px solid var(--cyan); outline-offset: -2px; }
+.lienzo .area { fill: var(--lienzo-area); }
+.lienzo .rejilla line { stroke: var(--lienzo-rejilla); stroke-width: 1; vector-effect: non-scaling-stroke; }
+.lienzo .rejilla line.mayor { stroke: var(--lienzo-rejilla-mayor); }
+.lienzo .reglas text { fill: var(--text-mute); font-family: var(--font-ui); }
+.lienzo .figura { cursor: move; }
+.lienzo .figura .trazo { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+.lienzo .figura .toque { fill: transparent; stroke: transparent; stroke-width: 14; vector-effect: non-scaling-stroke; }
+.lienzo .figura.seleccionada .trazo { stroke-width: 2.5; }
+.lienzo .figura.fuera .trazo { stroke: var(--lienzo-fuera) !important; stroke-dasharray: 6 4; }
+.lienzo .marco { fill: none; stroke: var(--lienzo-seleccion); stroke-width: 1.5; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.lienzo .tirador { fill: #ffffff; stroke: var(--lienzo-seleccion); stroke-width: 2; vector-effect: non-scaling-stroke; cursor: nwse-resize; }
+.lienzo .tirador.giro { cursor: grab; }
+.lienzo .recuadro { fill: rgba(28, 106, 134, 0.12); stroke: var(--lienzo-seleccion); stroke-width: 1; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; pointer-events: none; }
+.lateral { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.bloque-lateral { padding: 14px 16px; }
+.rejilla-props { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 10px; align-items: end; }
+.rejilla-props input { width: 100%; min-width: 0; }
+.check { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; white-space: nowrap; text-transform: none; letter-spacing: normal; font-size: 0.95rem; color: var(--text-dim); }
+.check input { width: auto; margin: 0; }
+.lista-capas { display: flex; flex-direction: column; gap: 12px; }
+.capa { border-top: 1px solid var(--line); padding-top: 10px; }
+.capa:first-child { border-top: 0; padding-top: 0; }
+.capa-cabecera { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.capa-cabecera select { margin-left: auto; }
+.muestra { width: 18px; height: 18px; border: 1px solid var(--text-dim); display: inline-block; }
+.bloque-lateral fieldset { margin: 10px 0; }
+@media (max-width: 900px) {
+  .mesa { grid-template-columns: minmax(0, 1fr); }
+}

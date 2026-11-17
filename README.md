@@ -69,6 +69,25 @@ El generador (`src/gcode/`) es un módulo puro, sin interfaz, y garantiza:
 Además, el validador independiente de QA `tools/gcode_lint.py` revisa en el CI todos los archivos
 de referencia, sin `--laser-mode`, con `--max-s` y `--area=` de cada perfil de prueba.
 
+## Fase 1 (en curso)
+
+- **Importar SVG y DXF.** SVG con un lector propio (DOMParser y aplanado de trayectos: todos los
+  comandos de `path`, arcos, `rect` con esquinas redondeadas, `circle`, `ellipse`, `line`,
+  `polyline`, `polygon`, grupos, `use`, `transform`, `viewBox` y unidades; sin unidades se toman px a
+  96 ppp). DXF con [dxf-parser](https://github.com/gdsestimating/dxf-parser) (MIT): `LINE`,
+  `LWPOLYLINE`/`POLYLINE` con bulge, `ARC`, `CIRCLE`, `ELLIPSE`, `SPLINE` (no racional) e `INSERT`;
+  unidades según `$INSUNITS` (sin unidades se supone mm). Las curvas se aplanan con una tolerancia de
+  0,02 mm. Textos e imágenes no se importan y se avisa.
+- **Lienzo** con el área de trabajo del perfil en mm: seleccionar, mover, escalar y girar con ratón o
+  táctil, campos X/Y/ancho/alto/ángulo y borrar.
+- **Capas por color de trazo:** corte (sigue el trazo, M3) o grabado (relleno por líneas, M4), con
+  potencia, velocidad, pasadas e intervalo; se pueden ocultar o quitar de la salida.
+- **Materiales:** se elige uno al empezar el proyecto. Sus ajustes por modo empiezan vacíos (no se
+  inventan valores): se llenan con lo que dé la cuadrícula de prueba.
+
+Dependencias: `dxf-parser` (MIT, con `loglevel`, MIT) se incluye en la app; `happy-dom` (MIT) solo
+se usa en las pruebas.
+
 ## Desarrollo
 
 Requiere Node 22 y Python 3 con pytest.

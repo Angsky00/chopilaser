@@ -17,6 +17,7 @@ import {
   type PerfilCrudo,
 } from './gcode';
 import { descargarBlob, exportarGcode } from './exportar';
+import { montarProyecto } from './ui/proyecto';
 import {
   CLAVE_PERFILES,
   almacenDanado,
@@ -146,6 +147,7 @@ app.innerHTML = `
       <p>Perfil: <strong id="perfil-activo" data-testid="perfil-activo"></strong> <span id="perfil-detalle" data-testid="perfil-detalle" class="nota"></span></p>
       <button id="maquina" data-testid="maquina" class="btn btn-ghost" type="button">Máquina</button>
     </div>
+    <section id="proyecto" data-testid="proyecto" class="panel cut tarjeta" aria-labelledby="t-proyecto"></section>
     <section class="panel cut tarjeta" aria-labelledby="t-cuadricula">
       <h2 id="t-cuadricula">Cuadrícula de prueba</h2>
       <p class="nota">Cuadros de potencia (${CUADRICULA_PREDETERMINADA.potencias.join(', ')} %) por velocidad
@@ -199,6 +201,7 @@ const archivoImportar = $<HTMLInputElement>('importar-archivo');
 const perfilesEstado = $<HTMLParagraphElement>('perfiles-estado');
 
 let almacen: Almacen = leerAlmacen(localStorage);
+const apiProyecto = montarProyecto($<HTMLElement>('proyecto'), () => perfilActivo(leerAlmacen(localStorage)));
 /** Índice del perfil que se edita; igual a perfiles.length si es uno nuevo. */
 let editando = 0;
 let perfil: Perfil | null = null;
@@ -301,6 +304,7 @@ function mostrarApp(): void {
 }
 
 function mostrarPerfil(p: Perfil): void {
+  apiProyecto.fijarPerfil(p);
   const a = p.config.area;
   $<HTMLElement>('perfil-activo').textContent = p.nombre;
   $<HTMLElement>('perfil-detalle').textContent =
