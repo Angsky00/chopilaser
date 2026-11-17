@@ -9,12 +9,14 @@ import {
   type Capa,
   type ConfigMaquina,
   type Trabajo,
+  tamanoArea,
 } from '../../src/gcode';
 
 // Configuraciones de PRUEBA, no son los valores reales de la máquina de Angel.
 const MAQUINAS_PRUEBA: ConfigMaquina[] = [
-  { sMax: 1000, laserMode32: null, camaAncho: 400, camaAlto: 400 },
-  { sMax: 255, laserMode32: 0, camaAncho: 300, camaAlto: 200 },
+  { sMax: 1000, laserMode32: null, area: { xMin: 0, yMin: 0, xMax: 400, yMax: 400 } },
+  { sMax: 255, laserMode32: 0, area: { xMin: -300, yMin: -200, xMax: 0, yMax: 0 } },
+  { sMax: 1, laserMode32: 1, area: { xMin: 10, yMin: 20, xMax: 310, yMax: 220 } },
 ];
 
 const capa = (c: Partial<Capa> = {}): Capa => ({ potencia: 50, velocidad: 1200, pasadas: 1, modo: 'M3', ...c });
@@ -39,7 +41,8 @@ const valoresS = (g: string) => [...g.matchAll(/^[^;]*?S(\d+(?:\.\d+)?)/gm)].map
 
 for (const maq of MAQUINAS_PRUEBA) {
   describe(`generador con sMax de prueba ${maq.sMax}`, () => {
-    const grid = generarGcode(generarCuadricula({ ancho: maq.camaAncho, alto: maq.camaAlto }), maq);
+    const grid = generarGcode(generarCuadricula(tamanoArea(maq.area)), maq);
+    const { xMin, yMin, xMax, yMax } = maq.area;
 
     it('100 % da exactamente sMax y 0 % da S0', () => {
       expect(potenciaAS(100, maq.sMax)).toBe(String(maq.sMax));
@@ -98,13 +101,33 @@ for (const maq of MAQUINAS_PRUEBA) {
       expect(grid.endsWith('M5\nS0\n')).toBe(true);
     });
 
-    it('sin NaN ni Infinity ni coordenadas negativas', () => {
+    it('sin NaN ni Infinity, y S y F nunca negativos', () => {
       expect(grid).not.toMatch(/NaN|Infinity|undefined/);
-      expect(grid).not.toMatch(/[XYSF]-/);
+      expect(grid).not.toMatch(/[SF]-/);
     });
 
-    it('coordenadas con 3 decimales fijos', () => {
-      for (const m of grid.matchAll(/[XY](\S+)/g)) expect(m[1]).toMatch(/^\d+\.\d{3}$/);
+    it('coordenadas con 3 decimales fijos y dentro del área de trabajo', () => {
+      let n = 0;
+      for (const m of grid.matchAll(/^G[01] X(\S+) Y(\S+)/gm)) {
+        n++;
+        expect(m[1]).toMatch(/^-?\d+\.\d{3}$/);
+        expect(m[2]).toMatch(/^-?\d+\.\d{3}$/);
+        expect(m[1]).not.toBe('-0.000');
+        const x = Number(m[1]);
+        const y = Number(m[2]);
+        expect(x).toBeGreaterThanOrEqual(xMin);
+        expect(x).toBeLessThanOrEqual(xMax);
+        expect(y).toBeGreaterThanOrEqual(yMin);
+        expect(y).toBeLessThanOrEqual(yMax);
+      }
+      expect(n).toBeGreaterThan(0);
+    });
+
+    it('el diseño se traslada a la esquina (xmin, ymin) del área', () => {
+      const g = generarGcode({ capas: [{ capa: capa(), trayectorias: [[{ x: 0, y: 0 }, { x: 1, y: 2 }]] }] }, maq);
+      const f = (v: number) => (Object.is(v, -0) ? 0 : v).toFixed(3);
+      expect(g).toContain(`G0 X${f(xMin)} Y${f(yMin)}\n`);
+      expect(g).toContain(`G1 X${f(xMin + 1)} Y${f(yMin + 2)} F1200\n`);
     });
 
     it('solo ASCII, sin BOM y con LF', () => {
@@ -115,17 +138,18 @@ for (const maq of MAQUINAS_PRUEBA) {
       expect(grid.endsWith('\n')).toBe(true);
     });
 
-    it('rechaza coordenadas fuera de la cama, negativas o NaN', () => {
+    it('rechaza coordenadas fuera del área, negativas en el diseño o NaN', () => {
       const con = (x: number, y: number): Trabajo => ({
         capas: [{ capa: capa(), trayectorias: [[{ x: 1, y: 1 }, { x, y }]] }],
       });
-      expect(() => generarGcode(con(maq.camaAncho + 0.001, 1), maq)).toThrow(ErrorGcode);
-      expect(() => generarGcode(con(1, maq.camaAlto + 1), maq)).toThrow(ErrorGcode);
+      const { ancho, alto } = tamanoArea(maq.area);
+      expect(() => generarGcode(con(ancho + 0.001, 1), maq)).toThrow(ErrorGcode);
+      expect(() => generarGcode(con(1, alto + 1), maq)).toThrow(ErrorGcode);
       expect(() => generarGcode(con(-0.001, 1), maq)).toThrow(ErrorGcode);
       expect(() => generarGcode(con(Number.NaN, 1), maq)).toThrow(ErrorGcode);
       expect(() => generarGcode(con(1, Number.POSITIVE_INFINITY), maq)).toThrow(ErrorGcode);
-      // El borde exacto de la cama sí es válido.
-      expect(() => generarGcode(con(maq.camaAncho, maq.camaAlto), maq)).not.toThrow();
+      // El borde exacto del área sí es válido.
+      expect(() => generarGcode(con(ancho, alto), maq)).not.toThrow();
     });
   });
 }
@@ -161,6 +185,18 @@ describe('generador: detalles', () => {
     expect(g).toContain('G1 X0.300 Y0.333 F1200');
   });
 
+  it('formato con signo y sin -0', () => {
+    expect(milesimasFijas(-500)).toBe('-0.500');
+    expect(milesimasFijas(-300000)).toBe('-300.000');
+    const g = generarGcode(
+      { capas: [{ capa: capa(), trayectorias: [[{ x: 300, y: 200 }, { x: 0.5, y: 0 }]] }] },
+      MAQUINAS_PRUEBA[1],
+    );
+    expect(g).toContain('G0 X0.000 Y0.000');
+    expect(g).toContain('G1 X-299.500 Y-200.000 F1200');
+    expect(g).not.toContain('-0.000');
+  });
+
   it('un -0 o un negativo diminuto que redondea a 0 es válido', () => {
     const g = generarGcode({ capas: [{ capa: capa(), trayectorias: [[{ x: -0, y: -0.0001 }, { x: 1, y: 1 }]] }] }, maq);
     expect(g).toContain('G0 X0.000 Y0.000');
@@ -170,6 +206,19 @@ describe('generador: detalles', () => {
     expect(potenciaAS(50, 255)).toBe('127.5');
     expect(potenciaAS(25, 255)).toBe('63.75');
     expect(potenciaAS(33.3333, 255)).toBe('85');
+  });
+
+  it('S de 0 a 1 (tipo Smoothie) conserva los decimales', () => {
+    expect(potenciaAS(100, 1)).toBe('1');
+    expect(potenciaAS(50, 1)).toBe('0.5');
+    expect(potenciaAS(25, 1)).toBe('0.25');
+    expect(potenciaAS(75, 1)).toBe('0.75');
+    expect(potenciaAS(0, 1)).toBe('0');
+    expect(potenciaAS(0.1, 1)).toBe('0.001');
+    const g = generarGcode(generarCuadricula({ ancho: 300, alto: 200 }), MAQUINAS_PRUEBA[2]);
+    expect(g).toContain('M3 S0.5\n');
+    expect(g).toContain('M4 S0.25\n');
+    expect(g).toContain('M4 S1\n');
   });
 
   it('S nunca pasa de un sMax con decimales', () => {

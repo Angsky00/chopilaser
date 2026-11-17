@@ -8,20 +8,28 @@ import { fileURLToPath } from 'node:url';
 export const RAIZ = join(dirname(fileURLToPath(import.meta.url)), '..');
 export const DIR_GOLDEN = join(RAIZ, 'tests', 'golden');
 
-export interface MaquinaPrueba {
+/** Lo que necesita el validador: S máximo y área [xmin, ymin, xmax, ymax]. */
+export interface LimitesLint {
   sMax: number;
-  laserMode32: 0 | 1 | null;
-  camaAncho: number;
-  camaAlto: number;
-}
-export interface CasoGolden {
-  archivo: string;
-  maquinaPrueba: MaquinaPrueba;
+  area: [number, number, number, number];
 }
 
-/** Configuraciones de PRUEBA (no son los valores reales de la máquina de Angel). */
+export interface CasoGolden {
+  perfil: string;
+  descripcion: string;
+  archivo: string;
+  /** Perfil tal como se escribe en la pantalla de configuración (texto). */
+  perfilPrueba: Record<string, string>;
+  area: [number, number, number, number];
+}
+
+/** Perfiles de PRUEBA (no son los valores reales de la máquina de Angel). */
 export function casosGolden(): CasoGolden[] {
   return JSON.parse(readFileSync(join(DIR_GOLDEN, 'configs.json'), 'utf8')).goldens;
+}
+
+export function limitesDe(caso: CasoGolden): LimitesLint {
+  return { sMax: Number(caso.perfilPrueba.sMax), area: caso.area };
 }
 
 export function sha256(datos: Uint8Array | string): string {
@@ -31,10 +39,10 @@ export function sha256(datos: Uint8Array | string): string {
 const PYTHON = process.env.PYTHON ?? (process.platform === 'win32' ? 'python' : 'python3');
 
 /** Corre el validador de QA SIN --laser-mode: un G0 con láser encendido es error. */
-export function lint(archivos: string | string[], m: MaquinaPrueba): { codigo: number; salida: string } {
+export function lint(archivos: string | string[], m: LimitesLint): { codigo: number; salida: string } {
   const r = spawnSync(
     PYTHON,
-    [join(RAIZ, 'tools', 'gcode_lint.py'), '--max-s', String(m.sMax), '--bed', `${m.camaAncho},${m.camaAlto}`, ...[archivos].flat()],
+    [join(RAIZ, 'tools', 'gcode_lint.py'), '--max-s', String(m.sMax), `--area=${m.area.join(',')}`, ...[archivos].flat()],
     { encoding: 'utf8' },
   );
   if (r.error) throw r.error;

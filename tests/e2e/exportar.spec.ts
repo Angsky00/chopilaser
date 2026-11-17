@@ -1,29 +1,53 @@
-// Exporta la cuadrícula de prueba en cada navegador y comprueba que el archivo
-// es idéntico al golden (SHA-256) y que pasa el validador de QA sin --laser-mode.
-// Las configuraciones son de PRUEBA, no los valores reales de la máquina de Angel.
+// Pruebas de la interfaz: pantalla de configuración inicial, perfiles y exportación.
+// La cuadrícula exportada en cada navegador debe ser idéntica al golden (SHA-256)
+// y pasar el validador de QA sin --laser-mode.
+// Los perfiles son de PRUEBA, no los valores reales de la máquina de Angel.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { casosGolden, DIR_GOLDEN, lint, sha256, type MaquinaPrueba } from '../util';
+import { casosGolden, DIR_GOLDEN, limitesDe, lint, sha256, type CasoGolden } from '../util';
 
 const tmp = mkdtempSync(join(tmpdir(), 'chopilaser-e2e-'));
+const CASOS = casosGolden();
+const CLAVE = 'chopilaser.perfiles.v1';
 
-async function configurar(page: Page, m: { sMax: string; camaAncho: string; camaAlto: string; modo32?: string }) {
-  await page.getByTestId('s-max').fill(m.sMax);
-  await page.getByTestId('cama-ancho').fill(m.camaAncho);
-  await page.getByTestId('cama-alto').fill(m.camaAlto);
-  await page.getByTestId('modo-32').selectOption(m.modo32 ?? '');
+async function llenarPerfil(page: Page, p: Record<string, string>) {
+  await page.getByTestId('perfil-nombre').fill(p.nombre ?? '');
+  await page.getByTestId('s-max').fill(p.sMax ?? '');
+  await page.getByTestId('modo-32').selectOption(p.laserMode32 ?? '');
+  await page.getByTestId('origen').selectOption(p.origen ?? '');
+  if (p.origen === 'personalizada') {
+    for (const [campo, id] of [
+      ['xMin', 'x-min'],
+      ['yMin', 'y-min'],
+      ['xMax', 'x-max'],
+      ['yMax', 'y-max'],
+    ]) {
+      await page.getByTestId(id).fill(p[campo] ?? '');
+    }
+  } else {
+    await page.getByTestId('cama-ancho').fill(p.camaAncho ?? '');
+    await page.getByTestId('cama-alto').fill(p.camaAlto ?? '');
+  }
 }
 
-function comprobarArchivo(bytes: Buffer, archivoGolden: string, m: MaquinaPrueba, nombre: string) {
-  const golden = readFileSync(join(DIR_GOLDEN, archivoGolden));
+async function crearPerfil(page: Page, p: Record<string, string>) {
+  await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
+  await llenarPerfil(page, p);
+  await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
+  await page.getByTestId('guardar-perfil').click();
+  await expect(page.getByTestId('app-principal')).toBeVisible();
+}
+
+function comprobarArchivo(bytes: Buffer, caso: CasoGolden, nombre: string) {
+  const golden = readFileSync(join(DIR_GOLDEN, caso.archivo));
   expect(bytes[0]).not.toBe(0xef); // sin BOM
   expect(bytes.includes(0x0d)).toBe(false); // solo LF
   expect(sha256(bytes)).toBe(sha256(golden));
   const f = join(tmp, nombre);
   writeFileSync(f, bytes);
-  const r = lint(f, m);
+  const r = lint(f, limitesDe(caso));
   expect(r.salida).toContain('0 errores, 0 avisos');
   expect(r.codigo).toBe(0);
 }
@@ -34,105 +58,202 @@ test.beforeEach(async ({ page }) => {
   await page.reload();
 });
 
-test('sin configuración no hay valores por defecto y todo está bloqueado', async ({ page }) => {
-  await expect(page.getByTestId('s-max')).toHaveValue('');
-  await expect(page.getByTestId('cama-ancho')).toHaveValue('');
-  await expect(page.getByTestId('cama-alto')).toHaveValue('');
-  await expect(page.getByTestId('generar')).toBeDisabled();
-  await expect(page.getByTestId('exportar')).toBeDisabled();
-  await expect(page.getByTestId('errores')).toContainText('S máximo ($30)');
-});
-
-const INVALIDOS = ['', '0', '-5', 'abc', 'NaN'];
-for (const campo of ['s-max', 'cama-ancho', 'cama-alto'] as const) {
-  test(`exportación bloqueada con ${campo} no válido`, async ({ page }) => {
-    await configurar(page, { sMax: '1000', camaAncho: '400', camaAlto: '400' });
-    await page.getByTestId('generar').click();
-    await expect(page.getByTestId('exportar')).toBeEnabled();
-    for (const valor of INVALIDOS) {
-      await page.getByTestId(campo).fill(valor);
-      await expect(page.getByTestId('exportar')).toBeDisabled();
-      await expect(page.getByTestId('generar')).toBeDisabled();
-      await expect(page.getByTestId('errores')).not.toBeEmpty();
-      await expect(page.getByTestId('salida')).toHaveValue('');
-    }
+test.describe('primera vez', () => {
+  test('muestra la pantalla de configuración antes que nada, sin valores por defecto', async ({ page }) => {
+    await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
+    await expect(page.getByTestId('app-principal')).toBeHidden();
+    await expect(page.getByTestId('generar')).toBeHidden();
+    await expect(page.getByTestId('exportar')).toBeHidden();
+    for (const id of ['perfil-nombre', 's-max', 'cama-ancho', 'cama-alto']) await expect(page.getByTestId(id)).toHaveValue('');
+    await expect(page.getByTestId('origen')).toHaveValue('');
+    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await expect(page.getByTestId('cancelar-perfil')).toBeHidden();
+    await expect(page.getByTestId('errores')).toContainText('S máximo ($30)');
   });
-}
 
-test('la configuración se guarda en localStorage, $32 incluido', async ({ page }) => {
-  await configurar(page, { sMax: '255', camaAncho: '300', camaAlto: '200', modo32: '1' });
-  await page.reload();
-  await expect(page.getByTestId('s-max')).toHaveValue('255');
-  await expect(page.getByTestId('cama-ancho')).toHaveValue('300');
-  await expect(page.getByTestId('cama-alto')).toHaveValue('200');
-  await expect(page.getByTestId('modo-32')).toHaveValue('1');
-  await expect(page.getByTestId('generar')).toBeEnabled();
+  const valido = { nombre: 'Prueba', sMax: '1000', laserMode32: '', origen: 'inferior-izquierda', camaAncho: '400', camaAlto: '400' };
+  for (const [campo, id] of [
+    ['sMax', 's-max'],
+    ['camaAncho', 'cama-ancho'],
+    ['camaAlto', 'cama-alto'],
+  ] as const) {
+    test(`valores no válidos en ${campo} bloquean el guardado`, async ({ page }) => {
+      await llenarPerfil(page, valido);
+      await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
+      for (const v of ['', '0', '-5', 'abc', 'NaN']) {
+        await page.getByTestId(id).fill(v);
+        await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+        await expect(page.getByTestId('errores')).not.toBeEmpty();
+      }
+      expect(await page.evaluate((k) => localStorage.getItem(k), CLAVE)).toBe(null);
+    });
+  }
+
+  test('sin nombre o sin origen no se puede guardar', async ({ page }) => {
+    await llenarPerfil(page, { ...valido, nombre: '   ' });
+    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await page.getByTestId('perfil-nombre').fill('Prueba');
+    await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
+    await page.getByTestId('origen').selectOption('');
+    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+  });
+
+  test('área personalizada no válida bloquea el guardado', async ({ page }) => {
+    await llenarPerfil(page, { nombre: 'P', sMax: '1', origen: 'personalizada', xMin: '0', yMin: '0', xMax: '10', yMax: '10' });
+    await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
+    await page.getByTestId('x-max').fill('-1');
+    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await page.getByTestId('x-max').fill('abc');
+    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+  });
+
+  test('el botón de GRBL 1.1 rellena los valores de fábrica', async ({ page }) => {
+    await page.getByTestId('preset-grbl').click();
+    await expect(page.getByTestId('s-max')).toHaveValue('1000');
+    await expect(page.getByTestId('modo-32')).toHaveValue('0');
+    await expect(page.getByTestId('cama-ancho')).toHaveValue('200');
+    await expect(page.getByTestId('cama-alto')).toHaveValue('200');
+    // El nombre y el origen no se suponen.
+    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+  });
+
+  test('«Pegar salida de $$» rellena $30, $32 y el tamaño', async ({ page }) => {
+    await page.getByText('Pegar salida de $$').click();
+    await page.getByTestId('pegar-dolar').fill('$30=255\n$31=0\n$32=1\n$130=300.000\n$131=200.000\nok');
+    await page.getByTestId('leer-dolar').click();
+    await expect(page.getByTestId('s-max')).toHaveValue('255');
+    await expect(page.getByTestId('modo-32')).toHaveValue('1');
+    await expect(page.getByTestId('cama-ancho')).toHaveValue('300');
+    await expect(page.getByTestId('cama-alto')).toHaveValue('200');
+  });
+
+  test('después de guardar, al recargar ya no aparece la pantalla', async ({ page }) => {
+    await crearPerfil(page, CASOS[1].perfilPrueba);
+    await expect(page.getByTestId('perfil-activo')).toHaveText(CASOS[1].perfilPrueba.nombre);
+    await page.reload();
+    await expect(page.getByTestId('app-principal')).toBeVisible();
+    await expect(page.getByTestId('pantalla-maquina')).toBeHidden();
+    await expect(page.getByTestId('perfil-activo')).toHaveText(CASOS[1].perfilPrueba.nombre);
+  });
 });
 
-for (const caso of casosGolden()) {
-  const m = caso.maquinaPrueba;
-  const cfg = { sMax: String(m.sMax), camaAncho: String(m.camaAncho), camaAlto: String(m.camaAlto) };
+test.describe('perfiles', () => {
+  test('«Máquina» edita el perfil; cancelar no cambia nada y un valor inválido no se guarda', async ({ page }) => {
+    await crearPerfil(page, CASOS[0].perfilPrueba);
+    await page.getByTestId('maquina').click();
+    await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
+    await expect(page.getByTestId('s-max')).toHaveValue('1000');
+    await page.getByTestId('s-max').fill('0');
+    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await page.getByTestId('cancelar-perfil').click();
+    await expect(page.getByTestId('app-principal')).toBeVisible();
+    await page.getByTestId('maquina').click();
+    await expect(page.getByTestId('s-max')).toHaveValue('1000');
+    await page.getByTestId('s-max').fill('500');
+    await page.getByTestId('guardar-perfil').click();
+    await expect(page.getByTestId('perfil-detalle')).toContainText('$30 = 500');
+  });
 
-  test(`exporta ${caso.archivo} por la ruta del navegador`, async ({ page, browserName }, info) => {
-    const tieneSelector = await page.evaluate(() => typeof (window as any).showSaveFilePicker === 'function');
-    if (tieneSelector) {
-      // Chromium/Edge: el diálogo nativo no se puede automatizar; se sustituye por un
-      // manejador falso que captura los bytes que la app escribe con createWritable().
-      await page.evaluate(() => {
-        (window as any).__guardado = null;
-        (window as any).showSaveFilePicker = async (op: { suggestedName: string }) => ({
-          async createWritable() {
-            const partes: Blob[] = [];
-            return {
-              async write(d: Blob) {
-                partes.push(d);
-              },
-              async close() {
-                const buf = await new Blob(partes).arrayBuffer();
-                (window as any).__guardado = { nombre: op.suggestedName, bytes: Array.from(new Uint8Array(buf)) };
-              },
-            };
-          },
-        });
-      });
-    } else {
-      expect(browserName).toBe('firefox');
-    }
-    await configurar(page, cfg);
+  test('se puede crear un segundo perfil y queda activo', async ({ page }) => {
+    await crearPerfil(page, CASOS[0].perfilPrueba);
+    await page.getByTestId('maquina').click();
+    await page.getByTestId('nuevo-perfil').click();
+    await expect(page.getByTestId('perfil-nombre')).toHaveValue('');
+    await llenarPerfil(page, CASOS[2].perfilPrueba);
+    await page.getByTestId('guardar-perfil').click();
+    await expect(page.getByTestId('perfil-activo')).toHaveText(CASOS[2].perfilPrueba.nombre);
+    await page.reload();
+    await expect(page.getByTestId('perfil-activo')).toHaveText(CASOS[2].perfilPrueba.nombre);
+  });
+
+  test('un perfil guardado dañado vuelve a la configuración y bloquea la exportación', async ({ page }) => {
+    await page.evaluate(
+      ([k, p]) => localStorage.setItem(k, JSON.stringify({ activo: 0, perfiles: [{ ...p, sMax: '-1' }] })),
+      [CLAVE, CASOS[0].perfilPrueba] as const,
+    );
+    await page.reload();
+    await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
+    await expect(page.getByTestId('exportar')).toBeHidden();
+    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+  });
+
+  test('la exportación se bloquea si el perfil guardado se daña después de generar', async ({ page }) => {
+    await crearPerfil(page, CASOS[0].perfilPrueba);
     await page.getByTestId('generar').click();
     await expect(page.getByTestId('exportar')).toBeEnabled();
+    await page.evaluate(
+      ([k, p]) => localStorage.setItem(k, JSON.stringify({ activo: 0, perfiles: [{ ...p, sMax: 'abc' }] })),
+      [CLAVE, CASOS[0].perfilPrueba] as const,
+    );
+    await page.getByTestId('exportar').click();
+    await expect(page.getByTestId('estado')).toContainText('Exportación bloqueada');
+    await expect(page.getByTestId('exportar')).toBeDisabled();
+  });
+});
 
-    let bytes: Buffer;
-    if (tieneSelector) {
-      await page.getByTestId('exportar').click();
-      await expect(page.getByTestId('estado')).toHaveAttribute('data-ruta', 'selector');
-      const g = await page.evaluate(() => (window as any).__guardado);
-      expect(g.nombre).toBe('cuadricula_prueba.gcode');
-      bytes = Buffer.from(g.bytes);
-    } else {
+for (const caso of CASOS) {
+  test.describe(`perfil de prueba ${caso.perfil} (${caso.descripcion})`, () => {
+    test(`exporta ${caso.archivo} por la ruta del navegador`, async ({ page, browserName }, info) => {
+      const tieneSelector = await page.evaluate(() => typeof (window as any).showSaveFilePicker === 'function');
+      if (tieneSelector) {
+        // Chromium/Edge: el diálogo nativo no se puede automatizar; se sustituye por un
+        // manejador falso que captura los bytes que la app escribe con createWritable().
+        await page.evaluate(() => {
+          (window as any).__guardado = null;
+          (window as any).showSaveFilePicker = async (op: { suggestedName: string }) => ({
+            async createWritable() {
+              const partes: Blob[] = [];
+              return {
+                async write(d: Blob) {
+                  partes.push(d);
+                },
+                async close() {
+                  const buf = await new Blob(partes).arrayBuffer();
+                  (window as any).__guardado = { nombre: op.suggestedName, bytes: Array.from(new Uint8Array(buf)) };
+                },
+              };
+            },
+          });
+        });
+      } else {
+        expect(browserName).toBe('firefox');
+      }
+      await crearPerfil(page, caso.perfilPrueba);
+      await page.getByTestId('generar').click();
+      await expect(page.getByTestId('exportar')).toBeEnabled();
+
+      let bytes: Buffer;
+      if (tieneSelector) {
+        await page.getByTestId('exportar').click();
+        await expect(page.getByTestId('estado')).toHaveAttribute('data-ruta', 'selector');
+        const g = await page.evaluate(() => (window as any).__guardado);
+        expect(g.nombre).toBe('cuadricula_prueba.gcode');
+        bytes = Buffer.from(g.bytes);
+      } else {
+        const descarga = page.waitForEvent('download');
+        await page.getByTestId('exportar').click();
+        const d = await descarga;
+        expect(d.suggestedFilename()).toBe('cuadricula_prueba.gcode');
+        bytes = readFileSync(await d.path());
+        await expect(page.getByTestId('estado')).toHaveAttribute('data-ruta', 'descarga');
+      }
+      comprobarArchivo(bytes, caso, `${info.project.name}_${caso.archivo}`);
+    });
+
+    test(`exporta ${caso.archivo} por la ruta de respaldo (descarga)`, async ({ page }, info) => {
+      // Quita la API para forzar Blob + <a download>, como en Firefox.
+      await page.evaluate(() => {
+        delete (window as any).showSaveFilePicker;
+        delete (Object.getPrototypeOf(window) as any).showSaveFilePicker;
+      });
+      expect(await page.evaluate(() => 'showSaveFilePicker' in window)).toBe(false);
+      await crearPerfil(page, caso.perfilPrueba);
+      await page.getByTestId('generar').click();
       const descarga = page.waitForEvent('download');
       await page.getByTestId('exportar').click();
       const d = await descarga;
       expect(d.suggestedFilename()).toBe('cuadricula_prueba.gcode');
-      bytes = readFileSync(await d.path());
-      await expect(page.getByTestId('estado')).toHaveAttribute('data-ruta', 'descarga');
-    }
-    comprobarArchivo(bytes, caso.archivo, m, `${info.project.name}_${caso.archivo}`);
-  });
-
-  test(`exporta ${caso.archivo} por la ruta de respaldo (descarga)`, async ({ page }, info) => {
-    // Quita la API para forzar Blob + <a download>, como en Firefox.
-    await page.evaluate(() => {
-      delete (window as any).showSaveFilePicker;
-      delete (Object.getPrototypeOf(window) as any).showSaveFilePicker;
+      comprobarArchivo(readFileSync(await d.path()), caso, `${info.project.name}_respaldo_${caso.archivo}`);
     });
-    expect(await page.evaluate(() => 'showSaveFilePicker' in window)).toBe(false);
-    await configurar(page, cfg);
-    await page.getByTestId('generar').click();
-    const descarga = page.waitForEvent('download');
-    await page.getByTestId('exportar').click();
-    const d = await descarga;
-    expect(d.suggestedFilename()).toBe('cuadricula_prueba.gcode');
-    comprobarArchivo(readFileSync(await d.path()), caso.archivo, m, `${info.project.name}_respaldo_${caso.archivo}`);
   });
 }
