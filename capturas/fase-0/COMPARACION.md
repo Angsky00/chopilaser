@@ -6,7 +6,8 @@ es de PRUEBA (sMax 1000, 400 × 400 mm), no el de la máquina de Angel.
 
 | Vista | App (fase 0) | Maqueta |
 |---|---|---|
-| Configuración, primera vez | `configuracion-primera-vez_1280.png`, `configuracion-primera-vez_390.png` | `maqueta-configuracion_1280.png`, `maqueta-configuracion_390.png` |
+| Configuración, primera vez (sin errores a la vista) | `configuracion-primera-vez_1280.png`, `configuracion-primera-vez_390.png` | `maqueta-configuracion_1280.png`, `maqueta-configuracion_390.png` |
+| Configuración tras pulsar «Guardar y empezar» vacía (errores) | `configuracion-errores_1280.png`, `configuracion-errores_390.png` | — |
 | Configuración llena (preset + $$) | `configuracion-llena_1280.png`, `configuracion-llena_390.png` | — |
 | Área avanzada por coordenadas | `configuracion-avanzado_1280.png`, `configuracion-avanzado_390.png` | — |
 | «Máquina» (editar perfil) | `maquina-editar_1280.png`, `maquina-editar_390.png` | — |

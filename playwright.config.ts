@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PUERTO = 4173;
+// Puerto del servidor de prueba; se puede cambiar si otro proceso usa el 4173.
+const PUERTO = Number(process.env.PW_PUERTO ?? 4173);
 
 export default defineConfig({
   testDir: 'tests/e2e',
@@ -21,7 +22,8 @@ export default defineConfig({
   webServer: {
     command: `npm run build && npx vite preview --host 127.0.0.1 --port ${PUERTO} --strictPort`,
     url: `http://127.0.0.1:${PUERTO}/`,
-    reuseExistingServer: !process.env.CI,
+    // Nunca reutilizar un servidor ajeno: se probaría otra compilación.
+    reuseExistingServer: false,
     timeout: 120_000,
   },
 });

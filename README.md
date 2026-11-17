@@ -82,6 +82,7 @@ npx playwright test --project=chromium --project=firefox   # interfaz y exportac
   al del golden y que pasa el validador. En Chromium también prueba la ruta de descarga quitando
   `showSaveFilePicker`.
 - El proyecto `msedge` de Playwright solo corre en Windows (CI en `windows-latest`).
+- Playwright levanta su propio servidor en el puerto 4173; si está ocupado, usa `PW_PUERTO=otro`.
 
 Validador a mano (escribe `--area=` con `=` por los valores negativos):
 

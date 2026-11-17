@@ -53,6 +53,11 @@ for (const ancho of [1280, 390]) {
   await p.evaluate(() => localStorage.clear());
   await p.reload();
   await foto(p, `configuracion-primera-vez_${ancho}.png`);
+  // Pulsar «Guardar y empezar» vacío: se ven todos los errores y el foco va al primero.
+  await p.getByTestId('guardar-perfil').click();
+  await foto(p, `configuracion-errores_${ancho}.png`);
+  await p.evaluate(() => localStorage.clear());
+  await p.reload();
   await p.getByTestId('preset-grbl').click();
   await p.getByText('Pegar salida de $$').click();
   await p.getByTestId('pegar-dolar').fill('$30=1000\n$32=1\n$130=400.000\n$131=400.000\nok');

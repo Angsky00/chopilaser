@@ -112,7 +112,7 @@ app.innerHTML = `
     <div class="acciones">
       <p id="errores" data-testid="errores" class="errores" role="alert"></p>
       <button id="cancelar-perfil" data-testid="cancelar-perfil" class="btn btn-ghost" type="button" hidden>Cancelar</button>
-      <button id="guardar-perfil" data-testid="guardar-perfil" class="btn btn-orange" type="button" disabled>Guardar y empezar</button>
+      <button id="guardar-perfil" data-testid="guardar-perfil" class="btn btn-orange" type="button" aria-describedby="errores">Guardar y empezar</button>
     </div>
   </section>
 
@@ -173,6 +173,17 @@ let almacen: Almacen = leerAlmacen(localStorage);
 let editando = 0;
 let perfil: Perfil | null = null;
 let gcode: string | null = null;
+/** Campos que ya perdieron el foco: solo ellos muestran su error. */
+const tocados = new Set<Campo>();
+/** Se intentó guardar: se muestran todos los errores. */
+let intentoGuardar = false;
+/** Orden de los campos en pantalla, para llevar el foco al primero con error. */
+const ORDEN: Exclude<Campo, 'laserMode32'>[] = ['nombre', 'sMax', 'camaAncho', 'camaAlto', 'xMin', 'yMin', 'xMax', 'yMax', 'origen'];
+
+function reiniciarErrores(): void {
+  tocados.clear();
+  intentoGuardar = false;
+}
 
 const fmtArea = (v: number) => milesimasCortas(aMilesimas(v));
 
@@ -190,25 +201,27 @@ function llenarFormulario(p: PerfilCrudo): void {
   validarFormulario();
 }
 
-function validarFormulario(): void {
+/** Valida y muestra los errores solo de los campos tocados, o de todos tras intentar guardar. */
+function validarFormulario(): ReturnType<typeof validarPerfil> {
   const personalizada = campos.origen.value === 'personalizada';
   camposCama.hidden = personalizada;
   camposArea.hidden = !personalizada;
   const r = validarPerfil(leerFormulario());
   const porCampo = r.ok ? {} : r.porCampo;
   for (const k of Object.keys(campos) as Campo[]) {
-    const msg = k === 'laserMode32' ? undefined : porCampo[k];
+    const visible = intentoGuardar || tocados.has(k);
+    const msg = k === 'laserMode32' || !visible ? undefined : porCampo[k];
     const el = document.getElementById(`error-${k}`);
     if (el) el.textContent = msg ?? '';
     if (msg) campos[k].setAttribute('aria-invalid', 'true');
     else campos[k].removeAttribute('aria-invalid');
   }
-  errores.textContent = r.ok ? '' : 'Completa los campos marcados para continuar.';
-  btnGuardar.disabled = !r.ok;
+  errores.textContent = !r.ok && intentoGuardar ? 'Completa los campos marcados para continuar.' : '';
   if (r.ok) {
     const a = r.perfil.config.area;
     areaResumen.textContent = `Área de trabajo: X ${fmtArea(a.xMin)} a ${fmtArea(a.xMax)}, Y ${fmtArea(a.yMin)} a ${fmtArea(a.yMax)} mm.`;
   } else areaResumen.textContent = '';
+  return r;
 }
 
 function llenarSelectorPerfiles(): void {
@@ -226,6 +239,7 @@ function mostrarPantallaMaquina(primeraVez: boolean): void {
   filaPerfiles.hidden = primeraVez;
   btnCancelar.hidden = primeraVez || perfil === null;
   editando = primeraVez ? 0 : almacen.activo;
+  reiniciarErrores();
   llenarSelectorPerfiles();
   llenarFormulario(almacen.perfiles[editando] ?? {});
   dolarEstado.textContent = '';
@@ -252,9 +266,15 @@ function invalidarGcode(): void {
   delete estado.dataset.ruta;
 }
 
-for (const el of Object.values(campos)) {
-  el.addEventListener('input', validarFormulario);
-  el.addEventListener('change', validarFormulario);
+for (const [k, el] of Object.entries(campos) as [Campo, HTMLInputElement | HTMLSelectElement][]) {
+  el.addEventListener('input', () => validarFormulario());
+  el.addEventListener('change', () => validarFormulario());
+  el.addEventListener('blur', () => {
+    // Si se va el foco de la ventana (otra pestaña o app), no cuenta como salir del campo.
+    if (!document.hasFocus()) return;
+    tocados.add(k);
+    validarFormulario();
+  });
 }
 
 $<HTMLButtonElement>('preset-grbl').addEventListener('click', () => {
@@ -276,18 +296,33 @@ $<HTMLButtonElement>('leer-dolar').addEventListener('click', () => {
 
 perfilSelect.addEventListener('change', () => {
   editando = Number(perfilSelect.value);
+  reiniciarErrores();
   llenarFormulario(almacen.perfiles[editando] ?? {});
 });
 
 $<HTMLButtonElement>('nuevo-perfil').addEventListener('click', () => {
   editando = almacen.perfiles.length;
+  reiniciarErrores();
   llenarSelectorPerfiles();
   llenarFormulario({});
 });
 
+// Al pulsar «Guardar y empezar» con el ratón, el campo activo no pierde el foco antes del clic:
+// así su error no aparece entre mousedown y mouseup, desplazando el botón y perdiendo el clic.
+btnGuardar.addEventListener('mousedown', (e) => e.preventDefault());
+
 btnGuardar.addEventListener('click', () => {
   const crudo = leerFormulario();
-  if (!validarPerfil(crudo).ok) return validarFormulario();
+  if (!validarPerfil(crudo).ok) {
+    // El guardado sigue bloqueado: se muestran todos los errores y el foco va al primero.
+    intentoGuardar = true;
+    const r = validarFormulario();
+    if (!r.ok) {
+      const primero = ORDEN.find((k) => r.porCampo[k] && campos[k].offsetParent !== null);
+      if (primero) campos[primero].focus();
+    }
+    return;
+  }
   const perfiles = [...almacen.perfiles];
   perfiles[editando] = crudo;
   almacen = { perfiles, activo: editando };

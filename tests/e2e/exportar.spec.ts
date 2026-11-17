@@ -40,6 +40,26 @@ async function crearPerfil(page: Page, p: Record<string, string>) {
   await expect(page.getByTestId('app-principal')).toBeVisible();
 }
 
+const AVISO_GUARDAR = 'Completa los campos marcados para continuar.';
+const ERRORES_CAMPO = ['nombre', 'sMax', 'camaAncho', 'camaAlto', 'origen', 'xMin', 'yMin', 'xMax', 'yMax'];
+
+/** Pulsa «Guardar y empezar» con datos no válidos: no guarda y sigue en la pantalla. */
+async function guardarBloqueado(page: Page) {
+  const antes = await page.evaluate((k) => localStorage.getItem(k), CLAVE);
+  await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
+  await page.getByTestId('guardar-perfil').click();
+  await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
+  await expect(page.getByTestId('app-principal')).toBeHidden();
+  await expect(page.getByTestId('errores')).toHaveText(AVISO_GUARDAR);
+  expect(await page.evaluate((k) => localStorage.getItem(k), CLAVE)).toBe(antes);
+}
+
+async function sinErroresVisibles(page: Page) {
+  for (const c of ERRORES_CAMPO) await expect(page.getByTestId(`error-${c}`)).toHaveText('');
+  await expect(page.getByTestId('errores')).toHaveText('');
+  await expect(page.locator('#pantalla-maquina [aria-invalid="true"]')).toHaveCount(0);
+}
+
 function comprobarArchivo(bytes: Buffer, caso: CasoGolden, nombre: string) {
   const golden = readFileSync(join(DIR_GOLDEN, caso.archivo));
   expect(bytes[0]).not.toBe(0xef); // sin BOM
@@ -66,7 +86,6 @@ test.describe('primera vez', () => {
     await expect(page.getByTestId('exportar')).toBeHidden();
     for (const id of ['perfil-nombre', 's-max', 'cama-ancho', 'cama-alto']) await expect(page.getByTestId(id)).toHaveValue('');
     await expect(page.getByTestId('origen')).toHaveValue('');
-    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
     await expect(page.getByTestId('cancelar-perfil')).toBeHidden();
     await expect(page.getByRole('heading', { name: 'Configura tu máquina' })).toBeVisible();
     await expect(page.getByTestId('pantalla-maquina')).toContainText(
@@ -87,11 +106,52 @@ test.describe('primera vez', () => {
       'Avanzado: área por coordenadas (mm)',
     );
     await expect(page.getByTestId('ayuda-avanzado')).toBeHidden();
-    await expect(page.getByTestId('errores')).toHaveText('Completa los campos marcados para continuar.');
-    await expect(page.getByTestId('error-nombre')).toHaveText('Este dato hace falta.');
+  });
+
+  test('al cargar no se muestra ningún error', async ({ page }) => {
+    await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
+    await sinErroresVisibles(page);
+    await expect(page.getByTestId('pantalla-maquina')).not.toContainText('Este dato hace falta.');
+    await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
+  });
+
+  test('el error de un campo vacío aparece al salir de él', async ({ page }) => {
+    await page.getByTestId('s-max').focus();
+    await expect(page.getByTestId('error-sMax')).toHaveText('');
+    await page.getByTestId('s-max').blur();
     await expect(page.getByTestId('error-sMax')).toHaveText('Este dato hace falta.');
-    await expect(page.getByTestId('error-camaAncho')).toHaveText('Este dato hace falta.');
-    await expect(page.getByTestId('error-origen')).toHaveText('Este dato hace falta.');
+    await expect(page.getByTestId('s-max')).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByTestId('s-max')).toHaveAttribute('aria-describedby', /\berror-sMax\b/);
+    // Solo ese campo: los que no se tocaron siguen sin error, y no hay aviso general.
+    await expect(page.getByTestId('error-camaAncho')).toHaveText('');
+    await expect(page.getByTestId('errores')).toHaveText('');
+    // Al corregirlo, el error desaparece.
+    await page.getByTestId('s-max').fill('1000');
+    await expect(page.getByTestId('error-sMax')).toHaveText('');
+    await expect(page.getByTestId('s-max')).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
+  test('al guardar con campos vacíos se ven todos los errores y el foco va al primero', async ({ page }) => {
+    await page.getByTestId('preset-grbl').click(); // $30 queda lleno
+    await guardarBloqueado(page);
+    const esperados: [string, string][] = [
+      ['nombre', 'perfil-nombre'],
+      ['camaAncho', 'cama-ancho'],
+      ['camaAlto', 'cama-alto'],
+      ['origen', 'origen'],
+    ];
+    for (const [c, id] of esperados) {
+      await expect(page.getByTestId(`error-${c}`)).toHaveText('Este dato hace falta.');
+      await expect(page.getByTestId(id)).toHaveAttribute('aria-invalid', 'true');
+      await expect(page.getByTestId(id)).toHaveAttribute('aria-describedby', new RegExp(`\\berror-${c}\\b`));
+    }
+    await expect(page.getByTestId('error-sMax')).toHaveText('');
+    await expect(page.getByTestId('perfil-nombre')).toBeFocused();
+    // Con el nombre lleno, el foco va al siguiente campo con error.
+    await page.getByTestId('perfil-nombre').fill('Prueba');
+    await page.getByTestId('guardar-perfil').click();
+    await expect(page.getByTestId('cama-ancho')).toBeFocused();
+    await expect(page.getByTestId('errores')).toHaveText(AVISO_GUARDAR);
   });
 
   const valido = { nombre: 'Prueba', sMax: '1000', laserMode32: '', origen: 'inferior-izquierda', camaAncho: '400', camaAlto: '400' };
@@ -102,30 +162,31 @@ test.describe('primera vez', () => {
   ] as const) {
     test(`valores no válidos en ${campo} bloquean el guardado`, async ({ page }) => {
       await llenarPerfil(page, valido);
-      await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
       for (const v of ['', '0', '-5', 'abc', 'NaN']) {
         await page.getByTestId(id).fill(v);
-        await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
-        await expect(page.getByTestId('errores')).toHaveText('Completa los campos marcados para continuar.');
+        await guardarBloqueado(page);
         await expect(page.getByTestId(`error-${campo}`)).toHaveText(
           v === '' ? 'Este dato hace falta.' : 'Escribe un número mayor que 0.',
         );
         await expect(page.getByTestId(id)).toHaveAttribute('aria-invalid', 'true');
+        await expect(page.getByTestId(id)).toBeFocused();
       }
-      await page.getByTestId(id).fill('100');
-      await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
-      await expect(page.getByTestId('errores')).toHaveText('');
       expect(await page.evaluate((k) => localStorage.getItem(k), CLAVE)).toBe(null);
+      await page.getByTestId(id).fill('100');
+      await expect(page.getByTestId('errores')).toHaveText('');
+      await page.getByTestId('guardar-perfil').click();
+      await expect(page.getByTestId('app-principal')).toBeVisible();
     });
   }
 
   test('sin nombre o sin origen no se puede guardar', async ({ page }) => {
     await llenarPerfil(page, { ...valido, nombre: '   ' });
-    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await guardarBloqueado(page);
+    await expect(page.getByTestId('perfil-nombre')).toBeFocused();
     await page.getByTestId('perfil-nombre').fill('Prueba');
-    await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
     await page.getByTestId('origen').selectOption('');
-    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await guardarBloqueado(page);
+    await expect(page.getByTestId('origen')).toBeFocused();
   });
 
   test('área personalizada no válida bloquea el guardado', async ({ page }) => {
@@ -134,11 +195,12 @@ test.describe('primera vez', () => {
       'Para máquinas que quedan en coordenadas negativas después del homing.',
     );
     await expect(page.getByTestId('cama-ancho')).toBeHidden();
-    await expect(page.getByTestId('guardar-perfil')).toBeEnabled();
     await page.getByTestId('x-max').fill('-1');
-    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await guardarBloqueado(page);
+    await expect(page.getByTestId('x-max')).toBeFocused();
     await page.getByTestId('x-max').fill('abc');
-    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await guardarBloqueado(page);
+    await expect(page.getByTestId('error-xMax')).toHaveText('Escribe un número.');
   });
 
   test('el botón de GRBL 1.1 llena solo $30=1000 y $32=0', async ({ page }) => {
@@ -154,7 +216,7 @@ test.describe('primera vez', () => {
     await expect(page.getByTestId('cama-alto')).toHaveValue('');
     await expect(page.getByTestId('origen')).toHaveValue('');
     await expect(page.getByTestId('perfil-nombre')).toHaveValue('');
-    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await guardarBloqueado(page);
   });
 
   test('«Pegar salida de $$» rellena $30, $32 y el tamaño', async ({ page }) => {
@@ -197,12 +259,17 @@ test.describe('perfiles', () => {
     await page.getByTestId('maquina').click();
     await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
     await expect(page.getByTestId('s-max')).toHaveValue('1000');
+    await sinErroresVisibles(page);
     await page.getByTestId('s-max').fill('0');
-    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await guardarBloqueado(page);
+    await expect(page.getByTestId('error-sMax')).toHaveText('Escribe un número mayor que 0.');
+    await expect(page.getByTestId('s-max')).toBeFocused();
     await page.getByTestId('cancelar-perfil').click();
     await expect(page.getByTestId('app-principal')).toBeVisible();
     await page.getByTestId('maquina').click();
     await expect(page.getByTestId('s-max')).toHaveValue('1000');
+    // Al volver a abrir «Máquina» no quedan errores del intento anterior.
+    await sinErroresVisibles(page);
     await page.getByTestId('s-max').fill('500');
     await page.getByTestId('guardar-perfil').click();
     await expect(page.getByTestId('perfil-detalle')).toContainText('$30 = 500');
@@ -228,7 +295,8 @@ test.describe('perfiles', () => {
     await page.reload();
     await expect(page.getByTestId('pantalla-maquina')).toBeVisible();
     await expect(page.getByTestId('exportar')).toBeHidden();
-    await expect(page.getByTestId('guardar-perfil')).toBeDisabled();
+    await guardarBloqueado(page);
+    await expect(page.getByTestId('error-sMax')).toHaveText('Escribe un número mayor que 0.');
   });
 
   test('la exportación se bloquea si el perfil guardado se daña después de generar', async ({ page }) => {
