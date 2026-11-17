@@ -51,6 +51,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: npm ci
+      - name: Imágenes de referencia de QA sin cambios (sha256sum -c)
+        working-directory: tests/vector_ref
+        run: sha256sum -c SHA256SUMS
       - name: Vitest
         run: npx vitest run
       - name: Validador de QA (pytest)
