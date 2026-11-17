@@ -24,7 +24,7 @@ const UMBRAL_PX = 3;
 type Arrastre =
   | { tipo: 'mover'; inicio: Punto; base: Figura[]; movido: boolean; idTocado: string | null; shift: boolean }
   | { tipo: 'caja'; inicio: Punto; actual: Punto; shift: boolean; previa: Set<string> }
-  | { tipo: 'escalar'; ux: number; uy: number; base: Figura[] }
+  | { tipo: 'escalar'; ux: number; uy: number; base: Figura[]; desfase: Punto }
   | { tipo: 'rotar'; centro: Punto; anguloInicio: number; base: Figura[]; anguloFigura: number };
 
 export interface EventosLienzo {
@@ -172,15 +172,14 @@ export class Lienzo {
     const h = TIRADOR_PX * this.mmPorPx();
     const esquinas: { ux: number; uy: number; p: Punto }[] = [];
     let marco: Punto[];
-    let centro: Punto;
     let arriba: Punto;
     let dirArriba: Punto;
     if (sel.length === 1) {
       const f = sel[0];
       const { ancho, alto } = tamanoFigura(f);
       const r = rotacion(f.angulo);
-      const loc = (ux: number, uy: number) => {
-        const q = aplicar(r, { x: (ux * ancho) / 2, y: (uy * alto) / 2 });
+      const loc = (ux: number, uy: number, fuera = 0) => {
+        const q = aplicar(r, { x: (ux * ancho) / 2 + ux * fuera, y: (uy * alto) / 2 + uy * fuera });
         return { x: f.x + q.x, y: f.y + q.y };
       };
       marco = [loc(-1, -1), loc(1, -1), loc(1, 1), loc(-1, 1)];
@@ -188,9 +187,9 @@ export class Lienzo {
         for (const uy of [-1, 0, 1]) {
           if (ux === 0 && uy === 0) continue;
           if ((ux === 0 && f.ancho0 === 0) || (uy === 0 && f.alto0 === 0)) continue;
-          esquinas.push({ ux, uy, p: loc(ux, uy) });
+          // Los tiradores van por fuera del marco: así no tapan figuras pequeñas.
+          esquinas.push({ ux, uy, p: loc(ux, uy, h * 0.75) });
         }
-      centro = { x: f.x, y: f.y };
       arriba = loc(0, 1);
       dirArriba = aplicar(r, { x: 0, y: 1 });
     } else {
@@ -202,20 +201,31 @@ export class Lienzo {
         { x: c.xMin, y: c.yMax },
       ];
       for (const [ux, uy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]])
-        esquinas.push({ ux, uy, p: { x: ux < 0 ? c.xMin : c.xMax, y: uy < 0 ? c.yMin : c.yMax } });
-      centro = { x: (c.xMin + c.xMax) / 2, y: (c.yMin + c.yMax) / 2 };
-      arriba = { x: centro.x, y: c.yMax };
+        esquinas.push({ ux, uy, p: { x: (ux < 0 ? c.xMin : c.xMax) + ux * h * 0.75, y: (uy < 0 ? c.yMin : c.yMax) + uy * h * 0.75 } });
+      arriba = { x: (c.xMin + c.xMax) / 2, y: c.yMax };
       dirArriba = { x: 0, y: 1 };
     }
     this.capaSeleccion.append(el('polygon', { class: 'marco', 'data-testid': 'marco-seleccion', points: marco.map((p) => `${r3(p.x)},${r3(p.y)}`).join(' ') }));
-    const giro = { x: arriba.x + dirArriba.x * h * 2.2, y: arriba.y + dirArriba.y * h * 2.2 };
+    const giro = { x: arriba.x + dirArriba.x * h * 2.6, y: arriba.y + dirArriba.y * h * 2.6 };
     this.capaSeleccion.append(el('line', { class: 'marco', x1: arriba.x, y1: arriba.y, x2: giro.x, y2: giro.y }));
     this.capaSeleccion.append(el('circle', { class: 'tirador giro', 'data-testid': 'tirador-giro', 'data-tirador': 'giro', cx: giro.x, cy: giro.y, r: h / 2 }));
     for (const e of esquinas)
       this.capaSeleccion.append(
         el('rect', { class: 'tirador', 'data-testid': `tirador-${e.ux}_${e.uy}`, 'data-tirador': `${e.ux},${e.uy}`, x: e.p.x - h / 2, y: e.p.y - h / 2, width: h, height: h }),
       );
-    void centro;
+  }
+
+  /** Punto del marco que corresponde al tirador (ux, uy), sin el desplazamiento hacia fuera. */
+  private esquinaReal(ux: number, uy: number): Punto {
+    const s = this.figuras.filter((f) => this.sel.has(f.id));
+    if (s.length === 1) {
+      const f = s[0];
+      const { ancho, alto } = tamanoFigura(f);
+      const q = aplicar(rotacion(f.angulo), { x: (ux * ancho) / 2, y: (uy * alto) / 2 });
+      return { x: f.x + q.x, y: f.y + q.y };
+    }
+    const c = cajaSeleccion(this.figuras, this.sel)!;
+    return { x: ux < 0 ? c.xMin : ux > 0 ? c.xMax : (c.xMin + c.xMax) / 2, y: uy < 0 ? c.yMin : uy > 0 ? c.yMax : (c.yMin + c.yMax) / 2 };
   }
 
   private emitirSeleccion(): void {
@@ -235,7 +245,9 @@ export class Lienzo {
       this.arrastre = { tipo: 'rotar', centro: c, anguloInicio: Math.atan2(p.y - c.y, p.x - c.x), base: this.figuras, anguloFigura: s.length === 1 ? s[0].angulo : 0 };
     } else if (tirador) {
       const [ux, uy] = tirador.split(',').map(Number);
-      this.arrastre = { tipo: 'escalar', ux, uy, base: this.figuras };
+      // Desfase entre el puntero y la esquina real del marco (el tirador está por fuera).
+      const esquina = this.esquinaReal(ux, uy);
+      this.arrastre = { tipo: 'escalar', ux, uy, base: this.figuras, desfase: { x: esquina.x - p.x, y: esquina.y - p.y } };
     } else if (idFigura) {
       if (e.shiftKey) {
         if (this.sel.has(idFigura)) this.sel.delete(idFigura);
@@ -289,6 +301,8 @@ export class Lienzo {
         break;
       }
       case 'escalar': {
+        p.x += a.desfase.x;
+        p.y += a.desfase.y;
         const s = a.base.filter((f) => this.sel.has(f.id));
         if (s.length === 1) {
           const g = escalarDesdeTirador(s[0], a.ux, a.uy, p, e.shiftKey);

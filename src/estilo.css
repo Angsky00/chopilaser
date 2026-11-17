@@ -343,7 +343,7 @@ input[readonly] { border-style: dashed; }
 .lienzo .reglas text { fill: var(--text-mute); font-family: var(--font-ui); }
 .lienzo .figura { cursor: move; }
 .lienzo .figura .trazo { fill: none; stroke-width: 1.5; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
-.lienzo .figura .toque { fill: transparent; stroke: transparent; stroke-width: 14; vector-effect: non-scaling-stroke; }
+.lienzo .figura .toque { fill: transparent; stroke: transparent; stroke-width: 10; vector-effect: non-scaling-stroke; }
 .lienzo .figura.seleccionada .trazo { stroke-width: 2.5; }
 .lienzo .figura.fuera .trazo { stroke: var(--lienzo-fuera) !important; stroke-dasharray: 6 4; }
 .lienzo .marco { fill: none; stroke: var(--lienzo-seleccion); stroke-width: 1.5; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; pointer-events: none; }
