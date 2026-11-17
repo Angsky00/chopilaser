@@ -30,14 +30,12 @@ export const MENSAJES = {
   vacio: 'Este dato hace falta.',
   numeroInvalido: 'Escribe un número mayor que 0.',
   exportarSinPerfil: 'Antes de exportar, configura tu máquina.',
-  // Provisional (pendiente de Marketing).
   perfilCambiado: 'El perfil cambió en otra pestaña. Vuelve a generar la cuadrícula.',
   // Solo para el modo avanzado del área.
   noEsNumero: 'Escribe un número.',
   xInvertido: 'El máximo de X debe ser mayor que el mínimo.',
   yInvertido: 'El máximo de Y debe ser mayor que el mínimo.',
   nombreRepetido: 'Ya hay un perfil con ese nombre.',
-  // Provisional (pendiente de Marketing).
   nombreLargo: `El nombre puede tener hasta ${MAX_NOMBRE} caracteres.`,
 } as const;
 

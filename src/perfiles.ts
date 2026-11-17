@@ -114,7 +114,7 @@ const NOMBRES_CAMPOS: Record<CampoPerfil | 'laserMode32' | 'homing23', string> =
 
 export type ResultadoImportar = { ok: true; archivo: ArchivoPerfiles } | { ok: false; error: string };
 
-/** Textos provisionales (pendientes de Marketing). */
+/** Textos de la interfaz. */
 export const TEXTOS_IMPORTAR = {
   error: (motivo: string) => `No se importó nada: ${motivo}`,
   noJson: 'el archivo no es JSON válido.',
@@ -169,7 +169,7 @@ export function leerArchivoPerfiles(texto: string, nombresExistentes: readonly u
       return mal(TEXTOS_IMPORTAR.invalido(i, NOMBRES_CAMPOS[campo as keyof typeof NOMBRES_CAMPOS] ?? campo, msg ?? ''));
     }
     if (p.laserMode32 !== undefined && !['', '0', '1'].includes(p.laserMode32 as string))
-      return mal(TEXTOS_IMPORTAR.invalido(i, NOMBRES_CAMPOS.laserMode32, 'debe ser 0 o 1'));
+      return mal(TEXTOS_IMPORTAR.invalido(i, NOMBRES_CAMPOS.laserMode32, 'Escribe 0 o 1.'));
     const h = p.homing23;
     if (typeof h === 'string' && h.trim() !== '' && mascara23(h) === null) return mal(TEXTOS_IMPORTAR.homing(i));
     perfiles.push(limpiar(p));

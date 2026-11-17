@@ -60,6 +60,10 @@ describe('materiales', () => {
     expect(errorAjuste('corte', { potencia: '50', velocidad: '', pasadas: '1' })).toBe(TEXTOS_CAPA.velocidad);
     expect(errorAjuste('grabado', { potencia: '50', velocidad: '100', pasadas: '1', intervalo: '' })).toBe(TEXTOS_CAPA.intervalo);
     expect(errorAjuste('grabado', lleno('a').grabado)).toBeNull();
+    // Potencia de 1 a 100, como en las capas.
+    expect(errorAjuste('corte', { potencia: '0', velocidad: '100', pasadas: '1' })).toBe('Potencia: escribe un número de 1 a 100.');
+    expect(errorAjuste('corte', { potencia: '101', velocidad: '100', pasadas: '1' })).toBe('Potencia: escribe un número de 1 a 100.');
+    expect(errorAjuste('corte', { potencia: '1', velocidad: '100', pasadas: '1' })).toBeNull();
   });
 
   it('guardar y leer en localStorage', () => {

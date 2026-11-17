@@ -151,7 +151,10 @@ test.describe('materiales', () => {
     await page.getByTestId('ajuste-corte-velocidad').fill('300');
     await page.getByTestId('ajuste-corte-pasadas').fill('2');
     await page.getByTestId('guardar-ajustes').click();
-    await expect(page.getByTestId('ajustes-estado')).toHaveText('Potencia: escribe un número de 0 a 100.');
+    await expect(page.getByTestId('ajustes-estado')).toHaveText('Potencia: escribe un número de 1 a 100.');
+    await page.getByTestId('ajuste-corte-potencia').fill('0');
+    await page.getByTestId('guardar-ajustes').click();
+    await expect(page.getByTestId('ajustes-estado')).toHaveText('Potencia: escribe un número de 1 a 100.');
     await page.getByTestId('ajuste-corte-potencia').fill('90');
     for (const [k, v] of Object.entries({ potencia: '30', velocidad: '3000', pasadas: '1', intervalo: '0.1' }))
       await page.getByTestId(`ajuste-grabado-${k}`).fill(v);
@@ -208,4 +211,27 @@ test.describe('materiales', () => {
     await page.getByTestId('nuevo-proyecto').click();
     await expect(page.getByTestId('material-select').locator('option')).toContainText(['Pino', 'MDF', 'Acrílico']);
   });
+});
+
+test.describe('ajustes del material: campos anchos (N1)', () => {
+  for (const ancho of [1280, 390]) {
+    test(`a ${ancho} px los campos miden al menos 70 px y muestran el valor entero`, async ({ page }) => {
+      await page.setViewportSize({ width: ancho, height: 900 });
+      await preparar(page, CASOS[0].perfilPrueba);
+      await empezarCon(page, 'Pino 3 mm');
+      await page.getByTestId('panel-material').locator('summary').click();
+      const valores: Record<string, string> = { potencia: '100', velocidad: '60000', pasadas: '100', intervalo: '0.125' };
+      for (const modo of ['corte', 'grabado'])
+        for (const [k, v] of Object.entries(valores)) {
+          const input = page.getByTestId(`ajuste-${modo}-${k}`);
+          if (!(await input.count())) continue;
+          await input.fill(v);
+          const caja = (await input.boundingBox())!;
+          expect(caja.width, `${modo}-${k}`).toBeGreaterThanOrEqual(70);
+          // El texto cabe: el contenido no desborda la caja.
+          const m = await input.evaluate((el: HTMLInputElement) => ({ scroll: el.scrollWidth, cliente: el.clientWidth }));
+          expect(m.scroll, `${modo}-${k}`).toBeLessThanOrEqual(m.cliente);
+        }
+    });
+  }
 });

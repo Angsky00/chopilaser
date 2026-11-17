@@ -328,3 +328,59 @@ test.describe('vista del lienzo en 390', () => {
     expect(await num(page, 'y')).toBeCloseTo(70, 1);
   });
 });
+
+test.describe('tiradores a 390 px (N3)', () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test('Mayús+clic en una figura bajo un tirador la añade; el centro del tirador sigue escalando', async ({ page }) => {
+    await page.goto('./');
+    await page.evaluate((p) => {
+      localStorage.clear();
+      localStorage.setItem('chopilaser.perfiles.v1', JSON.stringify({ activo: 0, perfiles: [p] }));
+    }, PERFIL);
+    await page.reload();
+    await page.getByTestId('material-nuevo').fill('Material de prueba');
+    await page.getByTestId('crear-material').click();
+    await page.getByTestId('empezar-proyecto').click();
+    await page.getByTestId('importar-diseno').setInputFiles(join(MUESTRAS, 'llavero.svg'));
+    await page.getByTestId('ajustar-vista').click();
+    await page.getByTestId('lienzo').focus();
+    await page.keyboard.press('Escape');
+    // Aro del llavero: círculo de centro (8, 15) y radio 2,5 (borde derecho en x = 10,5).
+    const aro = await aPantalla(page, 10.5, 15);
+    await page.mouse.click(aro.x, aro.y);
+    expect(await num(page, 'ancho')).toBeCloseTo(5, 1);
+    // Un punto del contorno exterior (rectángulo de 1..59 × 1..29) que cae dentro de un tirador,
+    // pero lejos de su centro.
+    const candidatos: { x: number; y: number }[] = [];
+    for (let x = 1.5; x <= 30; x += 0.25) candidatos.push(await aPantalla(page, x, 29), await aPantalla(page, x, 1));
+    for (let y = 7; y <= 23; y += 0.25) candidatos.push(await aPantalla(page, 1, y));
+    const punto = await page.evaluate((cs) => {
+      for (const c of cs) {
+        const el = document.elementFromPoint(c.x, c.y);
+        const t = el?.closest('[data-tirador]');
+        if (!t) continue;
+        const b = t.getBoundingClientRect();
+        if (Math.hypot(c.x - (b.x + b.width / 2), c.y - (b.y + b.height / 2)) > 5) return c;
+      }
+      return null;
+    }, candidatos);
+    expect(punto, 'algún tirador tapa el contorno a 390').not.toBeNull();
+    await page.keyboard.down('Shift');
+    await page.mouse.click(punto!.x, punto!.y);
+    await page.keyboard.up('Shift');
+    // Ahora están el aro y el contorno: la caja mide lo que el contorno (58 × 28).
+    expect(await num(page, 'ancho')).toBeCloseTo(58, 0);
+    expect(await num(page, 'alto')).toBeCloseTo(28, 0);
+    // Clic normal en el contorno bajo un tirador (con solo el aro elegido) también lo elige.
+    await page.mouse.click(aro.x, aro.y);
+    expect(await num(page, 'ancho')).toBeCloseTo(5, 1);
+    await page.mouse.click(punto!.x, punto!.y);
+    expect(await num(page, 'ancho')).toBeCloseTo(58, 0);
+    // Con el aro elegido, arrastrar desde el centro exacto de un tirador escala.
+    await page.mouse.click(aro.x, aro.y);
+    const centro = await centroDe(page, 'tirador-1_1');
+    await arrastrarRaton(page, centro, { x: centro.x + 20, y: centro.y - 20 });
+    expect(await num(page, 'ancho')).toBeGreaterThan(6);
+  });
+});
