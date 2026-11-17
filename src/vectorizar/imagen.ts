@@ -144,14 +144,3 @@ export function desenfocar(src: Uint8Array, ancho: number, alto: number, r: numb
   }
   return out;
 }
-
-/** Mapa de bits a RGBA blanco y negro opaco, como lo espera potrace. */
-export function rgbaDeBits(bits: Uint8Array): Uint8ClampedArray {
-  const out = new Uint8ClampedArray(bits.length * 4);
-  for (let i = 0, j = 0; i < bits.length; i++, j += 4) {
-    const v = bits[i] ? 0 : 255;
-    out[j] = out[j + 1] = out[j + 2] = v;
-    out[j + 3] = 255;
-  }
-  return out;
-}

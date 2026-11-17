@@ -53,7 +53,7 @@ export const TEXTOS_PROYECTO = {
   importado: (n: number, archivo: string) => (n === 1 ? `Se importó 1 figura de «${archivo}».` : `Se importaron ${n} figuras de «${archivo}».`),
   sinFiguras: (archivo: string) => `No encontré figuras en «${archivo}».`,
   omitidos: (lista: string) => `No se importaron: ${lista}.`,
-  formatoNoSoportado: 'Solo se pueden importar archivos .svg, .dxf, .png o .jpg.',
+  formatoNoSoportado: 'Solo se pueden importar archivos .svg, .dxf, .png o .jpg (.jpeg).',
   errorLeer: (archivo: string, motivo: string) => `No se pudo importar «${archivo}»: ${motivo}`,
   propiedades: 'Posición y tamaño (mm)',
   sinSeleccion: 'Toca una figura para seleccionarla, o arrastra un recuadro para elegir varias.',

@@ -1,10 +1,11 @@
-// Vectorizar (fase 1b): potrace (esm-potrace-wasm, GPL-2.0) sobre el mapa de bits y paso de sus
+// Vectorizar (fase 1b): potrace (potracelib 1.16 compilado a wasm por nosotros, GPL-2.0-or-later) sobre el mapa de bits y paso de sus
 // trayectos a trazos en mm. Módulo sin DOM: corre en el Worker y en las pruebas (Node).
 import type { Punto } from '../gcode/types';
 import { areaPoligono, escala, type Trazo } from '../diseno/geometria';
 import { aplanarTrayecto } from '../importar/svg';
 import type { ResultadoImportacion } from '../importar/tipos';
-import { DPI_POR_DEFECTO, mapaDeBits, rgbaDeBits, type OpcionesMapa } from './imagen';
+import { DPI_POR_DEFECTO, mapaDeBits, type OpcionesMapa } from './imagen';
+import { cargarPotrace } from './potrace';
 
 export interface OpcionesTrazado extends OpcionesMapa {
   /** Quitar manchas: potrace descarta las zonas de hasta este número de píxeles (turdsize). */
@@ -29,7 +30,7 @@ export interface GrupoTrazado {
 
 export interface ResultadoTrazado {
   grupos: GrupoTrazado[];
-  /** Trayectos tal como los da potrace (unidades de 0,1 px, Y hacia arriba). */
+  /** Trayectos tal como los da potrace (px, Y hacia arriba). */
   trayectos: string[];
   exteriores: number;
   huecos: number;
@@ -41,17 +42,7 @@ export interface ResultadoTrazado {
   mmPorPx: number;
 }
 
-type FnPotrace = (img: { data: Uint8ClampedArray; width: number; height: number }, o: Record<string, unknown>) => Promise<string[]>;
-let cargado: Promise<FnPotrace> | null = null;
-
-/** Carga potrace una sola vez (import dinámico: el wasm va dentro del módulo). */
-export function cargarPotrace(): Promise<FnPotrace> {
-  cargado ??= import('esm-potrace-wasm').then(async (m) => {
-    await m.init();
-    return m.potrace as unknown as FnPotrace;
-  });
-  return cargado;
-}
+export { cargarPotrace, fijarBytesPotrace } from './potrace';
 
 /** Distancia mínima entre puntos seguidos de un trazo (mm): por debajo se funden. */
 export const SEGMENTO_MINIMO_MM = 0.001;
@@ -99,22 +90,15 @@ export async function trazarImagen(
   const mmPorPx = 25.4 / (dpi && dpi > 0 ? dpi : DPI_POR_DEFECTO);
   if (!pixelesTinta) return { grupos: [], trayectos: [], exteriores: 0, huecos: 0, areaPx: 0, pixelesTinta, mmPorPx };
   const potrace = await cargarPotrace();
-  const trayectos = await potrace(
-    { data: rgbaDeBits(bits), width: ancho, height: alto },
-    {
-      turdsize: Math.max(0, Math.round(o.manchas)),
-      turnpolicy: 4,
-      alphamax: Math.max(0, Math.min(1.3334, o.suavizado)),
-      opticurve: 1,
-      opttolerance: 0.2,
-      pathonly: true,
-      extractcolors: false,
-      posterizelevel: 2,
-      posterizationalgorithm: 0,
-    },
-  );
-  // potrace da coordenadas en décimas de px con Y hacia arriba desde el borde inferior.
-  const k = mmPorPx / 10;
+  const trayectos = potrace(bits, ancho, alto, {
+    turdsize: Math.max(0, Math.round(o.manchas)),
+    turnpolicy: 4, // minoría, como potrace por defecto
+    alphamax: Math.max(0, Math.min(1.3334, o.suavizado)),
+    opticurve: true,
+    opttolerance: 0.2,
+  });
+  // potrace da píxeles con Y hacia arriba desde el borde inferior de la imagen.
+  const k = mmPorPx;
   const grupos: GrupoTrazado[] = [];
   const todos: Punto[][] = [];
   for (const d of trayectos) {
@@ -151,7 +135,7 @@ export function svgTrazado(r: Pick<ResultadoTrazado, 'trayectos'>, ancho: number
   const d = r.trayectos.map((t) => t.trim()).join(' ');
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="${ancho}" height="${alto}" viewBox="0 0 ${ancho} ${alto}">` +
-    `<path transform="translate(0 ${alto}) scale(0.1 -0.1)" fill="#000" fill-rule="evenodd" d="${d}"/></svg>\n`
+    `<path transform="translate(0 ${alto}) scale(1 -1)" fill="#000" fill-rule="evenodd" d="${d}"/></svg>\n`
   );
 }
 

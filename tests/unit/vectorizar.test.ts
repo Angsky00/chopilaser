@@ -1,4 +1,4 @@
-// Fase 1b: vectorizar con potrace (esm-potrace-wasm) usando las imágenes de referencia de QA
+// Fase 1b: vectorizar con potrace (potracelib compilado a wasm) usando las imágenes de referencia de QA
 // (tests/vector_ref/, copia exacta: se comprueban con SHA256SUMS y no se tocan).
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -218,5 +218,16 @@ describe('vectorizar las imágenes de referencia', () => {
   it('una imagen sin tinta no da contornos', async () => {
     const x = await trazar('logo_bn.png', { umbral: 0 });
     expect(x.grupos).toEqual([]);
+  });
+});
+
+describe('reducir imágenes de más de 4000 px', () => {
+  it('el lado mayor queda en 4000 px con la misma proporción; lo que cabe no cambia', async () => {
+    const { medidaReducida } = await import('../../src/ui/vectorizar');
+    expect(medidaReducida(4000, 3000)).toEqual({ ancho: 4000, alto: 3000, reducida: false });
+    expect(medidaReducida(4001, 4)).toEqual({ ancho: 4000, alto: 4, reducida: true });
+    expect(medidaReducida(6000, 3000)).toEqual({ ancho: 4000, alto: 2000, reducida: true });
+    expect(medidaReducida(3000, 6000)).toEqual({ ancho: 2000, alto: 4000, reducida: true });
+    expect(medidaReducida(9000, 1)).toEqual({ ancho: 4000, alto: 1, reducida: true });
   });
 });

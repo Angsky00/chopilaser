@@ -1,22 +1,16 @@
 // Utilidades de las pruebas de vectorizar: decodificar PNG/JPEG en Node y preparar potrace.
 import { readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { PNG } from 'pngjs';
 import jpeg from 'jpeg-js';
 import { RAIZ } from './util';
+import { fijarBytesPotrace } from '../src/vectorizar/potrace';
 
 export const DIR_VECTOR_REF = join(RAIZ, 'tests', 'vector_ref');
 
-/**
- * esm-potrace-wasm detecta Node y usa `require` y `__dirname`, que no existen en un módulo ES.
- * El wasm va dentro del .js, así que basta con darle esos dos nombres antes de cargarlo.
- */
+/** En Node, potrace.wasm se lee del disco (en la app lo carga el Worker con fetch). */
 export function prepararPotraceEnNode(): void {
-  const g = globalThis as Record<string, unknown>;
-  g.require ??= createRequire(import.meta.url);
-  g.__dirname ??= RAIZ;
-  g.__filename ??= join(RAIZ, 'potrace.js');
+  fijarBytesPotrace(readFileSync(join(RAIZ, 'src', 'vectorizar', 'potrace.wasm')));
 }
 
 export interface ImagenRgba {

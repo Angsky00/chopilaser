@@ -5,15 +5,18 @@ import { importacionDeTrazado, LIMITES_TRAZADO, OPCIONES_POR_DEFECTO, type Opcio
 import type { PedidoTrazado, RespuestaTrazado } from '../vectorizar/trabajador';
 import type { ResultadoImportacion } from '../importar/tipos';
 
-/** Textos provisionales (pendientes de Marketing). */
+/**
+ * Textos de la interfaz. Confirmados por Marketing: ayudaUmbral, invertir, vacio, pesada, aceptar y
+ * reducida; el resto, provisionales.
+ */
 export const TEXTOS_VECTORIZAR = {
   titulo: 'Vectorizar imagen',
   intro: 'Convierte un dibujo en blanco y negro (PNG o JPG) en líneas para cortar o grabar. Lo oscuro se convierte en formas; lo transparente cuenta como fondo.',
   original: 'Imagen',
   resultado: 'Resultado',
   umbral: 'Umbral',
-  ayudaUmbral: 'Lo más oscuro que este valor (0 a 255) se convierte en forma.',
-  invertir: 'Invertir (usar lo claro)',
+  ayudaUmbral: 'Lo que sea más oscuro que este valor (0 a 255) se convierte en forma.',
+  invertir: 'Invertir (lo claro se vuelve forma)',
   suavizado: 'Suavizado de esquinas',
   manchas: 'Quitar manchas (px)',
   ayudaManchas: 'Descarta puntos y agujeritos de hasta este tamaño en píxeles.',
@@ -24,12 +27,12 @@ export const TEXTOS_VECTORIZAR = {
   trazando: 'Trazando…',
   resumen: (exteriores: number, huecos: number) =>
     `${exteriores === 1 ? '1 forma' : `${exteriores} formas`} y ${huecos === 1 ? '1 hueco' : `${huecos} huecos`}.`,
-  vacio: 'Con estos ajustes no queda ninguna forma. Prueba con otro umbral o desactiva «Invertir».',
-  aceptar: 'Añadir al lienzo',
+  vacio: 'Con estos ajustes no queda ninguna forma. Prueba con otro umbral o cambia «Invertir».',
+  aceptar: 'Agregar al lienzo',
   cancelar: 'Cancelar',
-  muyGrande: (ancho: number, alto: number) =>
-    `La imagen mide ${ancho} × ${alto} px. El máximo es ${MAX_LADO_PX} px por lado: achícala y vuelve a intentarlo.`,
-  pesada: `La imagen pasa de ${MAX_BYTES_IMAGEN / 1_000_000} MB.`,
+  reducida: (ancho: number, alto: number, ancho2: number, alto2: number) =>
+    `La imagen medía ${ancho} × ${alto} px y se redujo a ${ancho2} × ${alto2} px, el máximo es ${MAX_LADO_PX} px por lado.`,
+  pesada: `La imagen pasa de ${MAX_BYTES_IMAGEN / 1_000_000} MB. Usa una versión más ligera.`,
   noImagen: 'No se pudo leer la imagen. Usa un archivo PNG o JPG.',
   errorTrazar: (m: string) => `No se pudo vectorizar la imagen: ${m}`,
 } as const;
@@ -49,6 +52,14 @@ const fmtMm = (n: number) => (Math.round(n * 10) / 10).toLocaleString('es');
 
 export const esImagen = (nombre: string) => /\.(png|jpe?g)$/i.test(nombre);
 
+/** Medida a la que se decodifica: igual si cabe; si no, el lado mayor a MAX_LADO_PX y la misma proporción. */
+export function medidaReducida(ancho: number, alto: number): { ancho: number; alto: number; reducida: boolean } {
+  const mayor = Math.max(ancho, alto);
+  if (mayor <= MAX_LADO_PX) return { ancho, alto, reducida: false };
+  const f = MAX_LADO_PX / mayor;
+  return { ancho: Math.max(1, Math.round(ancho * f)), alto: Math.max(1, Math.round(alto * f)), reducida: true };
+}
+
 export interface ApiVectorizar {
   /** Abre el panel con un archivo. Devuelve un mensaje de error si no se puede usar. */
   abrir(f: File): Promise<string | null>;
@@ -65,6 +76,7 @@ export function montarVectorizar(raiz: HTMLElement, aceptar: (r: ResultadoImport
   const imgOriginal = h('img', { alt: T.original, 'data-testid': 'trazado-original' });
   const vista = h('div', { class: 'vista-trazado', 'data-testid': 'trazado-vista', role: 'img', 'aria-label': T.resultado });
   const estado = h('p', { 'data-testid': 'trazado-estado', role: 'status' });
+  const aviso = h('p', { class: 'aviso-exportar', 'data-testid': 'trazado-aviso', role: 'status', hidden: '' });
 
   const rango = (id: string, min: number, max: number, paso: number, valor: number) => {
     const r = h('input', { type: 'range', id: `${id}-rango`, 'data-testid': `${id}-rango`, min: String(min), max: String(max), step: String(paso), value: String(valor), 'aria-hidden': 'true', tabindex: '-1' });
@@ -98,6 +110,7 @@ export function montarVectorizar(raiz: HTMLElement, aceptar: (r: ResultadoImport
     h('h3', { id: 't-vectorizar', text: T.titulo }),
     h('p', { class: 'nota', text: T.intro }),
     nombreArchivo,
+    aviso,
     h(
       'div',
       { class: 'trazado-cuerpo' },
@@ -212,8 +225,15 @@ export function montarVectorizar(raiz: HTMLElement, aceptar: (r: ResultadoImport
     aceptar(r, nombre);
   });
 
-  async function decodificar(f: File): Promise<ImageData> {
-    const bmp = await createImageBitmap(f, { premultiplyAlpha: 'none', colorSpaceConversion: 'none' });
+  /**
+   * Decodifica la imagen. Si pasa de MAX_LADO_PX por lado, el navegador la reduce al decodificar
+   * (createImageBitmap con resizeWidth/resizeHeight, fuera del hilo de la interfaz), con la misma
+   * proporción.
+   */
+  async function decodificar(f: File, red: { ancho: number; alto: number; reducida: boolean }): Promise<ImageData> {
+    const opciones: ImageBitmapOptions = { premultiplyAlpha: 'none', colorSpaceConversion: 'none' };
+    if (red.reducida) Object.assign(opciones, { resizeWidth: red.ancho, resizeHeight: red.alto, resizeQuality: 'high' });
+    const bmp = await createImageBitmap(f, opciones);
     const lienzo = document.createElement('canvas');
     lienzo.width = bmp.width;
     lienzo.height = bmp.height;
@@ -230,20 +250,25 @@ export function montarVectorizar(raiz: HTMLElement, aceptar: (r: ResultadoImport
       if (f.size > MAX_BYTES_IMAGEN) return T.pesada;
       const cab = leerCabecera(new Uint8Array(await f.slice(0, 256 * 1024).arrayBuffer()));
       if (!cab) return T.noImagen;
-      if (cab.ancho > MAX_LADO_PX || cab.alto > MAX_LADO_PX) return T.muyGrande(cab.ancho, cab.alto);
+      const red = medidaReducida(cab.ancho, cab.alto);
       let datos: ImageData;
       try {
-        datos = await decodificar(f);
+        datos = await decodificar(f, red);
       } catch {
         return T.noImagen;
       }
-      if (datos.width > MAX_LADO_PX || datos.height > MAX_LADO_PX) return T.muyGrande(datos.width, datos.height);
+      if (datos.width > MAX_LADO_PX || datos.height > MAX_LADO_PX) return T.noImagen;
       cerrar();
       imagenId++;
-      imagen = { rgba: datos.data, ancho: datos.width, alto: datos.height, dpi: cab.dpi, nombre: f.name };
-      const dpi = cab.dpi ?? DPI_POR_DEFECTO;
+      // Al reducir se conserva el tamaño en mm: los ppp bajan en la misma proporción.
+      const factor = datos.width / cab.ancho;
+      const dpiOriginal = cab.dpi ?? DPI_POR_DEFECTO;
+      const dpi = dpiOriginal * factor;
+      imagen = { rgba: datos.data, ancho: datos.width, alto: datos.height, dpi: cab.dpi === null && !red.reducida ? null : dpi, nombre: f.name };
       const k = 25.4 / dpi;
       nombreArchivo.textContent = `«${f.name}»: ${T.medida(datos.width, datos.height, Math.round(dpi * 10) / 10, cab.dpi !== null, fmtMm(datos.width * k), fmtMm(datos.height * k))}`;
+      aviso.textContent = red.reducida ? T.reducida(cab.ancho, cab.alto, datos.width, datos.height) : '';
+      aviso.hidden = !red.reducida;
       urlOriginal = URL.createObjectURL(f);
       imgOriginal.src = urlOriginal;
       panel.hidden = false;

@@ -34,7 +34,7 @@ test.describe('vectorizar imagen', () => {
     await expect(page.getByTestId('trazado-svg').locator('path')).toHaveCount(1);
     // Vista previa en vivo: con umbral 0 no queda nada y no se puede aceptar.
     await page.getByTestId('trazado-umbral').fill('0');
-    await expect(estado(page)).toHaveText('Con estos ajustes no queda ninguna forma. Prueba con otro umbral o desactiva «Invertir».');
+    await expect(estado(page)).toHaveText('Con estos ajustes no queda ninguna forma. Prueba con otro umbral o cambia «Invertir».');
     await expect(page.getByTestId('trazado-aceptar')).toBeDisabled();
     await page.getByTestId('trazado-umbral').fill('128');
     await expect(estado(page)).toHaveText('3 formas y 2 huecos.');
@@ -82,16 +82,61 @@ test.describe('vectorizar imagen', () => {
     await expect(estado(page)).toHaveText('3 formas y 2 huecos.');
   });
 
-  test('una imagen de más de 4000 px por lado se rechaza con un mensaje visible', async ({ page }, info) => {
+  test('una imagen de 4001 px de ancho se reduce a 4000 px (no se rechaza) con el aviso de Marketing', async ({ page }, info) => {
     const png = new PNG({ width: 4001, height: 4 });
     png.data.fill(255);
     const ruta = info.outputPath('grande.png');
     writeFileSync(ruta, PNG.sync.write(png));
     await page.getByTestId('importar-diseno').setInputFiles(ruta);
-    await expect(page.getByTestId('proyecto-estado')).toHaveText(
-      'No se pudo importar «grande.png»: La imagen mide 4001 × 4 px. El máximo es 4000 px por lado: achícala y vuelve a intentarlo.',
+    await expect(page.getByTestId('panel-trazado')).toBeVisible();
+    await expect(page.getByTestId('trazado-aviso')).toHaveText('La imagen medía 4001 × 4 px y se redujo a 4000 × 4 px, el máximo es 4000 px por lado.');
+    await expect(page.getByTestId('trazado-medida')).toContainText('4000 × 4 px');
+  });
+
+  test('una imagen de 6000 px se reduce a 4000 px con la misma proporción, sin congelar la pestaña', async ({ page }, info) => {
+    test.setTimeout(90_000);
+    // 6000 × 3000 px, blanca con un rectángulo negro en el centro (1500..4500 × 750..2250).
+    const png = new PNG({ width: 6000, height: 3000 });
+    png.data.fill(255);
+    for (let y = 750; y < 2250; y++) png.data.fill(0, (y * 6000 + 1500) * 4, (y * 6000 + 4500) * 4);
+    for (let i = 3; i < png.data.length; i += 4) png.data[i] = 255;
+    const ruta = info.outputPath('enorme.png');
+    writeFileSync(ruta, PNG.sync.write(png, { deflateLevel: 1 }));
+    // Latido en el hilo de la interfaz: guarda el mayor hueco entre ticks.
+    await page.evaluate(() => {
+      const w = window as any;
+      w.__maxHueco = 0;
+      let ultimo = performance.now();
+      w.__latido = setInterval(() => {
+        const t = performance.now();
+        w.__maxHueco = Math.max(w.__maxHueco, t - ultimo);
+        ultimo = t;
+      }, 20);
+    });
+    await page.getByTestId('importar-diseno').setInputFiles(ruta);
+    await expect(page.getByTestId('trazado-aviso')).toHaveText(
+      'La imagen medía 6000 × 3000 px y se redujo a 4000 × 2000 px, el máximo es 4000 px por lado.',
+      { timeout: 30_000 },
     );
-    await expect(page.getByTestId('panel-trazado')).toBeHidden();
+    // Se conserva el tamaño en mm (96 ppp → 64 ppp).
+    await expect(page.getByTestId('trazado-medida')).toContainText('4000 × 2000 px a 64 ppp (la imagen no indica su resolución): 1587,5 × 793,8 mm.');
+    await expect(estado(page)).toHaveText('1 forma y 0 huecos.', { timeout: 30_000 });
+    const svg = page.getByTestId('trazado-svg');
+    await expect(svg).toHaveAttribute('viewBox', '0 0 4000 2000');
+    const hueco = await page.evaluate(() => {
+      const w = window as any;
+      clearInterval(w.__latido);
+      return w.__maxHueco as number;
+    });
+    info.annotations.push({ type: 'mayor hueco del hilo de la interfaz (ms)', description: hueco.toFixed(0) });
+    expect(hueco).toBeLessThan(1000);
+  });
+
+  test('los archivos .jpeg también se aceptan', async ({ page }, info) => {
+    const ruta = info.outputPath('logo.jpeg');
+    writeFileSync(ruta, readFileSync(join(REF, 'logo_jpg_q30.jpg')));
+    await page.getByTestId('importar-diseno').setInputFiles(ruta);
+    await expect(estado(page)).toHaveText('3 formas y 2 huecos.');
   });
 
   test('el G-code de una imagen vectorizada pasa el validador', async ({ page }, info) => {

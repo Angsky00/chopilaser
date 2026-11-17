@@ -108,27 +108,33 @@ se usa en las pruebas.
 
 - «Importar SVG, DXF o imagen» (o soltar la imagen sobre el lienzo) abre el panel **Vectorizar
   imagen**: umbral (0 a 255), invertir, suavizado de esquinas, quitar manchas (px) y desenfoque
-  opcional, con vista previa en vivo. «Añadir al lienzo» pone el resultado como figuras editables
+  opcional, con vista previa en vivo. «Agregar al lienzo» pone el resultado como figuras editables
   (una por forma, con sus huecos) en **una sola capa** (color `#000000`).
 - El trazado corre en un **Web Worker** con potrace compilado a WebAssembly; la interfaz no se
   bloquea. Todo el paso a blanco y negro se hace en enteros, así el resultado es igual en todos los
   navegadores y en las pruebas.
 - Lo transparente cuenta como fondo (se compone sobre blanco), también con «invertir».
 - Tamaño: con la resolución que trae la imagen (PNG `pHYs`, JPEG JFIF en ppp o puntos por cm); si
-  no trae, 96 ppp. Máximo 4000 px por lado y 30 MB; si no, mensaje visible y no se abre.
+  no trae, 96 ppp. Máximo 30 MB. Si un lado pasa de 4000 px, la imagen se reduce al decodificarla
+  (`createImageBitmap` con `resizeWidth`/`resizeHeight`, sin bloquear la interfaz) para que el lado
+  mayor mida 4000 px, con la misma proporción y el mismo tamaño en mm (los ppp bajan en la misma
+  proporción), y se avisa. Se aceptan `.png`, `.jpg` y `.jpeg`.
 - El grabado de fotos por puntos (raster) **no** está aquí: es de la fase 3.
 
-### Licencia de potrace
+### potrace: compilado por nosotros
 
-- Se usa [`esm-potrace-wasm`](https://github.com/tomayac/esm-potrace-wasm) **0.5.1** (Thomas
-  Steiner), una compilación a WebAssembly de [Potrace](https://potrace.sourceforge.net/) (Peter
-  Selinger). En npm declara `"license": "GPL-2.0"` y trae el texto de la GPL versión 2.
-- Potrace se distribuye bajo «GPL versión 2 o, a tu elección, cualquier versión posterior», lo que
-  permite usarlo en ChopiLaser (GPL-3.0-or-later). El envoltorio de `esm-potrace-wasm` no aclara
-  si es «solo 2» o «2 o posterior» (`GPL-2.0` es un identificador SPDX antiguo y ambiguo): **queda
-  pendiente de confirmar** (ver el PR de la fase 1b). `imagetracerjs` (Unlicense) sería la
-  alternativa si hiciera falta.
-- Se incluye en la app como un archivo aparte que solo carga el Worker de vectorizar.
+- `src/vectorizar/potrace.wasm` es **potracelib 1.16** ([Potrace](https://potrace.sourceforge.net/),
+  © 2001-2019 Peter Selinger, **GPL-2.0-or-later**, compatible con la GPL-3.0-or-later de
+  ChopiLaser) sin modificar, compilado con emscripten junto con una envoltura mínima propia
+  (`tools/potrace/envoltura.c`: mapa de bits de entrada, curvas de salida). El cargador es
+  `src/vectorizar/potrace.ts` (sin el JavaScript de emscripten; ~31 kB).
+- Licencia y aviso de copyright de potrace: `third-party-licenses/potrace/` (`COPYING`, `AUTHORS`,
+  `AVISO.txt`).
+- Compilación reproducible: `tools/potrace/construir.sh` usa **emsdk 4.0.23** y el tarball
+  `potrace-1.16.tar.gz` comprobado con SHA-256
+  (`be8248a17dedd6ccbaab2fcc45835bb0502d062e40fbded3bc56028ce5eb7acc`). El trabajo `potrace` del CI
+  compila dos veces y comprueba que las dos salidas y el `.wasm` del repo tienen el mismo SHA-256.
+- Ya no se usa `esm-potrace-wasm`.
 - Solo para las pruebas: `pngjs` (MIT) y `jpeg-js` (BSD-3-Clause) para leer las imágenes en Node.
 - Las imágenes de referencia de QA están en `tests/vector_ref/` **sin modificar** (se comprueban con
   `sha256sum -c SHA256SUMS` en Vitest y en el CI). Sus resultados esperados (SVG de potrace) están
