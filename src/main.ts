@@ -37,7 +37,7 @@ app.innerHTML = `
     <div class="herramientas">
     <div class="bloque">
       <button id="preset-grbl" data-testid="preset-grbl" class="btn btn-ghost" type="button">Usar valores de fábrica de GRBL 1.1</button>
-      <small class="ayuda">Llena $30=1000 y $32=0. El nombre, el área y el origen los pones tú.</small>
+      <small class="ayuda" data-testid="ayuda-preset">Llena <code>$30=1000</code> y <code>$32=0</code>. El nombre, el área y el origen los pones tú.</small>
     </div>
     <details id="caja-dolar" class="bloque">
       <summary class="btn btn-ghost">Pegar salida de $$</summary>
@@ -68,6 +68,11 @@ app.innerHTML = `
           <option value="0">Desactivado ($32=0)</option>
         </select>
         <small class="ayuda" id="ayuda-32">ChopiLaser apaga el láser en cada movimiento rápido, esté como esté este valor.</small>
+      </div>
+      <div class="campo">
+        <label for="homing-23">Dirección del homing ($23)</label>
+        <input id="homing-23" data-testid="homing-23" readonly placeholder="Se lee de $$" aria-describedby="ayuda-23" />
+        <small class="ayuda" id="ayuda-23">Solo informativo: se guarda tal como venga en $$ y no cambia el G-code.</small>
       </div>
       <fieldset>
         <legend>Área de trabajo (mm)</legend>
@@ -154,6 +159,7 @@ const campos = {
   yMin: $<HTMLInputElement>('y-min'),
   xMax: $<HTMLInputElement>('x-max'),
   yMax: $<HTMLInputElement>('y-max'),
+  homing23: $<HTMLInputElement>('homing-23'),
 };
 type Campo = keyof typeof campos;
 const camposCama = $<HTMLDivElement>('campos-cama');
@@ -178,7 +184,7 @@ const tocados = new Set<Campo>();
 /** Se intentó guardar: se muestran todos los errores. */
 let intentoGuardar = false;
 /** Orden de los campos en pantalla, para llevar el foco al primero con error. */
-const ORDEN: Exclude<Campo, 'laserMode32'>[] = ['nombre', 'sMax', 'camaAncho', 'camaAlto', 'xMin', 'yMin', 'xMax', 'yMax', 'origen'];
+const ORDEN: Exclude<Campo, 'laserMode32' | 'homing23'>[] = ['nombre', 'sMax', 'camaAncho', 'camaAlto', 'xMin', 'yMin', 'xMax', 'yMax', 'origen'];
 
 function reiniciarErrores(): void {
   tocados.clear();
@@ -210,7 +216,7 @@ function validarFormulario(): ReturnType<typeof validarPerfil> {
   const porCampo = r.ok ? {} : r.porCampo;
   for (const k of Object.keys(campos) as Campo[]) {
     const visible = intentoGuardar || tocados.has(k);
-    const msg = k === 'laserMode32' || !visible ? undefined : porCampo[k];
+    const msg = k === 'laserMode32' || k === 'homing23' || !visible ? undefined : porCampo[k];
     const el = document.getElementById(`error-${k}`);
     if (el) el.textContent = msg ?? '';
     if (msg) campos[k].setAttribute('aria-invalid', 'true');
@@ -296,7 +302,9 @@ $<HTMLButtonElement>('leer-dolar').addEventListener('click', () => {
   const n = Object.keys(valores).length;
   for (const [k, v] of Object.entries(valores)) campos[k as Campo].value = v;
   dolarEstado.textContent =
-    n > 0
+    n === 1
+      ? 'Listo: se llenó 1 valor. Revísalo antes de guardar.'
+      : n > 1
       ? `Listo: se llenaron ${n} valores. Revísalos antes de guardar.`
       : 'No encontré valores de GRBL en el texto. Copia la respuesta completa de $$.';
   dolarEstado.className = n > 0 ? 'ok' : 'errores';

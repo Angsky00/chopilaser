@@ -205,9 +205,10 @@ test.describe('primera vez', () => {
 
   test('el botón de GRBL 1.1 llena solo $30=1000 y $32=0', async ({ page }) => {
     await expect(page.getByTestId('preset-grbl')).toHaveText('Usar valores de fábrica de GRBL 1.1');
-    await expect(page.getByTestId('pantalla-maquina')).toContainText(
+    await expect(page.getByTestId('ayuda-preset')).toHaveText(
       'Llena $30=1000 y $32=0. El nombre, el área y el origen los pones tú.',
     );
+    await expect(page.getByTestId('ayuda-preset').locator('code')).toHaveText(['$30=1000', '$32=0']);
     await page.getByTestId('preset-grbl').click();
     await expect(page.getByTestId('s-max')).toHaveValue('1000');
     await expect(page.getByTestId('modo-32')).toHaveValue('0');
@@ -228,6 +229,44 @@ test.describe('primera vez', () => {
     await expect(page.getByTestId('cama-ancho')).toHaveValue('300');
     await expect(page.getByTestId('cama-alto')).toHaveValue('200');
     await expect(page.getByTestId('dolar-estado')).toHaveText('Listo: se llenaron 4 valores. Revísalos antes de guardar.');
+  });
+
+  test('«Pegar salida de $$»: singular, $23 como dato y números estrictos', async ({ page }) => {
+    await page.getByText('Pegar salida de $$').click();
+    await page.getByTestId('pegar-dolar').fill('$30=1e3\n$130=4.0.0\n$131=150\nok');
+    await page.getByTestId('leer-dolar').click();
+    await expect(page.getByTestId('dolar-estado')).toHaveText('Listo: se llenó 1 valor. Revísalo antes de guardar.');
+    await expect(page.getByTestId('s-max')).toHaveValue('');
+    await expect(page.getByTestId('cama-ancho')).toHaveValue('');
+    await expect(page.getByTestId('cama-alto')).toHaveValue('150');
+    await expect(page.getByTestId('homing-23')).toHaveAttribute('readonly', '');
+    await page.getByTestId('pegar-dolar').fill('$23=3\n$30=1000\n$130=400\nok');
+    await page.getByTestId('leer-dolar').click();
+    await expect(page.getByTestId('dolar-estado')).toHaveText('Listo: se llenaron 3 valores. Revísalos antes de guardar.');
+    await expect(page.getByTestId('homing-23')).toHaveValue('3');
+    await page.getByTestId('perfil-nombre').fill('Con $23');
+    await page.getByTestId('origen').selectOption('inferior-izquierda');
+    await page.getByTestId('guardar-perfil').click();
+    await expect(page.getByTestId('app-principal')).toBeVisible();
+    const guardado = await page.evaluate((k) => JSON.parse(localStorage.getItem(k)!), CLAVE);
+    expect(guardado.perfiles[0].homing23).toBe('3');
+    await page.getByTestId('maquina').click();
+    await expect(page.getByTestId('homing-23')).toHaveValue('3');
+  });
+
+  test('coma decimal y topes muestran su error y bloquean el guardado', async ({ page }) => {
+    await llenarPerfil(page, { ...valido, sMax: '1,000' });
+    await guardarBloqueado(page);
+    await expect(page.getByTestId('error-sMax')).toHaveText('Escribe un número.');
+    await page.getByTestId('s-max').fill('100001');
+    await expect(page.getByTestId('error-sMax')).toHaveText('Escribe un número entre 0 y 100000.');
+    await page.getByTestId('s-max').fill('100000');
+    await page.getByTestId('cama-ancho').fill('5001');
+    await expect(page.getByTestId('error-camaAncho')).toHaveText('Escribe un número entre 0 y 5000.');
+    await guardarBloqueado(page);
+    await page.getByTestId('cama-ancho').fill('5000');
+    await page.getByTestId('guardar-perfil').click();
+    await expect(page.getByTestId('app-principal')).toBeVisible();
   });
 
   test('«Pegar salida de $$» avisa si no hay valores de GRBL', async ({ page }) => {

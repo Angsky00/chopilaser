@@ -312,3 +312,4 @@ input:focus, select:focus, textarea:focus {
   .acciones .errores { flex: 1 1 100%; }
 }
 #fila-perfiles { margin-bottom: 12px; }
+input[readonly] { border-style: dashed; }
