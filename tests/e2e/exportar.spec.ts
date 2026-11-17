@@ -311,3 +311,30 @@ for (const caso of CASOS) {
     });
   });
 }
+
+test.describe('estilo', () => {
+  for (const ancho of [1280, 390]) {
+    test(`sin desbordamiento horizontal a ${ancho} px`, async ({ page }) => {
+      await page.setViewportSize({ width: ancho, height: 844 });
+      const sinDesborde = async () =>
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0);
+      await sinDesborde();
+      await page.getByTestId('origen').selectOption('personalizada');
+      await sinDesborde();
+      await crearPerfil(page, CASOS[0].perfilPrueba);
+      await page.getByTestId('generar').click();
+      await sinDesborde();
+    });
+  }
+
+  test('Rajdhani se sirve desde la app, sin CDN', async ({ page }) => {
+    const externas: string[] = [];
+    page.on('request', (r) => {
+      if (!r.url().startsWith('http://127.0.0.1')) externas.push(r.url());
+    });
+    await page.reload();
+    await page.evaluate(() => document.fonts.ready);
+    expect(await page.evaluate(() => document.fonts.check('600 16px Rajdhani'))).toBe(true);
+    expect(externas).toEqual([]);
+  });
+});

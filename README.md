@@ -94,9 +94,23 @@ python3 tools/gcode_lint.py --max-s 1 --area=10,20,310,220 tests/golden/cuadricu
 `tools/gcode_lint.py` y `tools/tests/test_lint.py` son copia exacta de la versión de QA. Cualquier
 cambio lo hace QA, no el generador.
 
+## Estilo visual
+
+- Paleta y estilo de la maqueta aprobada por Angel: fondo con rejilla, paneles con esquinas
+  cortadas y línea naranja a cian en el encabezado. El texto sobre naranja es oscuro (`#140c08`).
+- Tipografía **Rajdhani** (SIL Open Font License 1.1), servida desde la propia app, sin CDN:
+  `src/fuentes/rajdhani-latin-{500,600,700}-normal.woff2` (de Fontsource 5.3.0, subconjunto
+  latino). La licencia completa está en `src/fuentes/Rajdhani-OFL.txt`.
+- Contraste WCAG AA: `node tools/contraste.mjs` calcula cada par texto/fondo de `src/estilo.css`
+  y falla si alguno no cumple. También corre en Vitest (`tests/unit/contraste.test.ts`).
+- Capturas en 1280 y 390 px, con las de la maqueta para comparar:
+  `npm run build && node tools/capturas.mjs [ruta-de-la-maqueta]` (quedan en `capturas/fase-0/`).
+
 ## Licencia
 
 GPLv3 o posterior (`GPL-3.0-or-later`). Ver `LICENSE`.
+
+La fuente Rajdhani se distribuye bajo la SIL Open Font License 1.1 (`src/fuentes/Rajdhani-OFL.txt`).
 
 ChopiLaser se escribió desde cero: no contiene código, recursos ni formatos de LightBurn ni de
 LaserGRBL.

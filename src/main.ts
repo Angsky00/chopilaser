@@ -22,30 +22,33 @@ import { escribirAlmacen, leerAlmacen, perfilActivo, type Almacen } from './perf
 const t = tamanoCuadricula(CUADRICULA_PREDETERMINADA);
 const app = document.querySelector<HTMLDivElement>('#app')!;
 app.innerHTML = `
-  <header>
-    <h1>ChopiLaser <small>(nombre provisional)</small></h1>
+  <header class="topbar">
+    <h1 class="marca">Chopi<span>Laser</span> <small>(nombre provisional)</small></h1>
   </header>
+  <div class="contenido">
 
-  <section id="pantalla-maquina" data-testid="pantalla-maquina" aria-labelledby="t-maquina" hidden>
+  <section id="pantalla-maquina" data-testid="pantalla-maquina" class="panel cut asistente" aria-labelledby="t-maquina" hidden>
     <h2 id="t-maquina">Configura tu máquina</h2>
-    <p class="nota" id="intro-maquina">ChopiLaser necesita saber cómo es tu láser antes de exportar. Solo se pide una vez; después lo cambias en «Máquina».</p>
+    <p class="lead" id="intro-maquina">ChopiLaser necesita saber cómo es tu láser antes de exportar. Solo se pide una vez; después lo cambias en «Máquina».</p>
     <div id="fila-perfiles" class="fila" hidden>
-      <label>Perfil <select id="perfil-select" data-testid="perfil-select"></select></label>
-      <button id="nuevo-perfil" data-testid="nuevo-perfil" type="button">Nuevo perfil</button>
+      <label class="campo-linea">Perfil <select id="perfil-select" data-testid="perfil-select"></select></label>
+      <button id="nuevo-perfil" data-testid="nuevo-perfil" class="btn btn-ghost" type="button">Nuevo perfil</button>
     </div>
+    <div class="herramientas">
     <div class="bloque">
-      <button id="preset-grbl" data-testid="preset-grbl" type="button">Usar valores de fábrica de GRBL 1.1</button>
+      <button id="preset-grbl" data-testid="preset-grbl" class="btn btn-ghost" type="button">Usar valores de fábrica de GRBL 1.1</button>
       <small class="ayuda">Llena $30=1000 y $32=0. El nombre, el área y el origen los pones tú.</small>
     </div>
     <details id="caja-dolar" class="bloque">
-      <summary>Pegar salida de $$</summary>
+      <summary class="btn btn-ghost">Pegar salida de $$</summary>
       <p class="nota">Escribe $$ en la consola de tu máquina, copia todo lo que responda y pégalo aquí.</p>
       <textarea id="pegar-dolar" data-testid="pegar-dolar" rows="6" spellcheck="false" aria-label="Pegar salida de $$"></textarea>
-      <button id="leer-dolar" data-testid="leer-dolar" type="button">Leer valores</button>
+      <button id="leer-dolar" data-testid="leer-dolar" class="btn btn-cyan" type="button">Leer valores</button>
       <p id="dolar-estado" data-testid="dolar-estado" role="status"></p>
     </details>
-    <form id="form-maquina" novalidate>
-      <div class="campo">
+    </div>
+    <form id="form-maquina" class="form-grid" novalidate>
+      <div class="campo campo-nombre">
         <label for="perfil-nombre">Nombre de la máquina</label>
         <input id="perfil-nombre" data-testid="perfil-nombre" placeholder="Ej. Láser del taller" autocomplete="off" aria-describedby="ayuda-nombre error-nombre" />
         <small class="ayuda" id="ayuda-nombre">Para reconocerla si tienes varias.</small>
@@ -106,28 +109,33 @@ app.innerHTML = `
         <p id="area-resumen" data-testid="area-resumen" class="nota"></p>
       </fieldset>
     </form>
-    <p id="errores" data-testid="errores" class="errores" role="alert"></p>
-    <button id="guardar-perfil" data-testid="guardar-perfil" type="button" disabled>Guardar y empezar</button>
-    <button id="cancelar-perfil" data-testid="cancelar-perfil" type="button" hidden>Cancelar</button>
+    <div class="acciones">
+      <p id="errores" data-testid="errores" class="errores" role="alert"></p>
+      <button id="cancelar-perfil" data-testid="cancelar-perfil" class="btn btn-ghost" type="button" hidden>Cancelar</button>
+      <button id="guardar-perfil" data-testid="guardar-perfil" class="btn btn-orange" type="button" disabled>Guardar y empezar</button>
+    </div>
   </section>
 
   <main id="app-principal" data-testid="app-principal" hidden>
-    <div class="fila">
+    <div class="fila barra-perfil panel cut">
       <p>Perfil: <strong id="perfil-activo" data-testid="perfil-activo"></strong> <span id="perfil-detalle" data-testid="perfil-detalle" class="nota"></span></p>
-      <button id="maquina" data-testid="maquina" type="button">Máquina</button>
+      <button id="maquina" data-testid="maquina" class="btn btn-ghost" type="button">Máquina</button>
     </div>
-    <section aria-labelledby="t-cuadricula">
+    <section class="panel cut tarjeta" aria-labelledby="t-cuadricula">
       <h2 id="t-cuadricula">Cuadrícula de prueba</h2>
       <p class="nota">Cuadros de potencia (${CUADRICULA_PREDETERMINADA.potencias.join(', ')} %) por velocidad
         (${CUADRICULA_PREDETERMINADA.velocidades.join(', ')} mm/min), en M3 y en M4. Ocupa ${t.ancho} x ${t.alto} mm
         desde la esquina inferior izquierda del área de trabajo.</p>
-      <button id="generar" data-testid="generar" type="button">Generar cuadrícula de prueba</button>
-      <button id="exportar" data-testid="exportar" type="button" disabled>Exportar .gcode</button>
+      <div class="fila">
+        <button id="generar" data-testid="generar" class="btn btn-cyan" type="button">Generar cuadrícula de prueba</button>
+        <button id="exportar" data-testid="exportar" class="btn btn-orange" type="button" disabled>Exportar .gcode</button>
+      </div>
       <p id="estado" data-testid="estado" role="status"></p>
       <textarea id="salida" data-testid="salida" readonly rows="16" spellcheck="false" aria-label="G-code generado"></textarea>
     </section>
   </main>
-  <footer><p>Software libre bajo licencia GPLv3 o posterior.</p></footer>
+  </div>
+  <footer class="pie"><p>Software libre bajo licencia GPLv3 o posterior.</p></footer>
 `;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
